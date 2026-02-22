@@ -15,7 +15,7 @@ with col2:
     
     # Optional: Add a progress bar for visual effect
     st.info("Development Progress: 75%")
-    st.progress(75)
+    # st.progress(75)
 
     # Optional: Email signup simulation
     email = st.text_input("Get notified when we launch:", placeholder="rouniyaramit@gmail.com")
@@ -24,3 +24,4 @@ with col2:
             st.success("Thanks! We'll keep you updated.")
         else:
             st.warning("Please enter a valid email.")
+
