@@ -9,7 +9,7 @@ col1, col2, col3 = st.columns([1, 2, 1])
 with col2:
     st.image("https://cdn-icons-png.flaticon.com/512/4461/4461841.png", width=100)
     st.title("Protection Coordination with TCC")
-    st.header("Coming Soon")
+    st.header("Coming Soon by Grid Automation and Protection Division")
     st.write("---")
     st.write("We are working hard to bring you something amazing. Stay tuned!")
     
@@ -24,6 +24,7 @@ with col2:
             # st.success("Thanks! We'll keep you updated.")
         # else:
             # st.warning("Please enter a valid email.")
+
 
 
 
