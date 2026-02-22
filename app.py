@@ -3,185 +3,176 @@ import pandas as pd
 import math
 import csv
 from io import BytesIO, StringIO
+from streamlit_option_menu import option_menu
 
-# Import FPDF for PDF generation with error handling
+# Import FPDF for PDF generation [cite: 1]
 try:
     from fpdf import FPDF
 except ImportError:
     FPDF = None
 
-# --- Page Configuration ---
+# --- Page Setup ---
 st.set_page_config(page_title="NEA Grid Protection Coordination Tool", layout="wide")
 
-# --- CSS to Mimic Your Original Styles ---
-st.markdown("""
-    <style>
-    .main { background-color: #ffffff; }
-    .stButton>button { background-color: #0056b3; color: white; font-weight: bold; width: 100%; }
-    .stButton>button:hover { background-color: #004494; color: white; }
-    .footer { position: fixed; bottom: 0; width: 100%; color: #555555; font-style: italic; text-align: center; background-color: white; padding: 10px; }
-    </style>
-    """, unsafe_allow_html=True)
-
-# --- Initialize Session State (Prevents NameErrors) ---
+# --- Initialize Session State to prevent NameErrors ---
 if 'sys_vars' not in st.session_state:
-    st.session_state.sys_vars = {"mva": 0.0, "hv": 0.0, "lv": 0.0, "z": 0.0, "cti": 0.0, "q4": 0.0, "q5": 0.0}
+    st.session_state.sys_vars = {"mva": 16.6, "hv": 33.0, "lv": 11.0, "z": 10.0, "cti": 150.0, "q4": 900.0, "q5": 300.0}
 if 'feeder_data' not in st.session_state:
-    st.session_state.feeder_data = [{"l": 0.0, "c": 0.0} for _ in range(3)]
-if 'oc_txt' not in st.session_state:
-    st.session_state.oc_txt = ""
-if 'ef_txt' not in st.session_state:
-    st.session_state.ef_txt = ""
+    st.session_state.feeder_data = [{"l": 200.0, "c": 400.0}, {"l": 250.0, "c": 400.0}, {"l": 300.0, "c": 400.0}]
+if 'oc_report' not in st.session_state:
+    st.session_state.oc_report = ""
+if 'ef_report' not in st.session_state:
+    st.session_state.ef_report = ""
 
-# --- Top File Menu (Simulated via Sidebar) ---
-with st.sidebar:
-    st.header("File Menu")
-    
-    if st.button("Preload Default Data"):
-        st.session_state.sys_vars = {"mva": 16.6, "hv": 33.0, "lv": 11.0, "z": 10.0, "cti": 150.0, "q4": 900.0, "q5": 300.0}
-        st.session_state.feeder_data = [{"l": 200.0, "c": 400.0}, {"l": 250.0, "c": 400.0}, {"l": 300.0, "c": 400.0}]
-        st.rerun()
+# --- Top "File Menu" Navigation ---
+selected_menu = option_menu(
+    menu_title=None, 
+    options=["Home", "Preload Default Data", "Save Tabulated CSV", "Save PDF", "Reset"],
+    icons=["house", "cloud-download", "file-earmark-spreadsheet", "file-pdf", "arrow-counterclockwise"],
+    menu_icon="cast", 
+    default_index=0,
+    orientation="horizontal",
+)
 
-    if st.button("Reset"):
-        st.session_state.sys_vars = {k: 0.0 for k in st.session_state.sys_vars}
-        st.session_state.feeder_data = [{"l": 0.0, "c": 0.0} for _ in range(3)]
-        st.session_state.oc_txt = ""
-        st.session_state.ef_txt = ""
-        st.rerun()
+# Menu Logic [cite: 3, 41, 44]
+if selected_menu == "Preload Default Data":
+    st.session_state.sys_vars = {"mva": 16.6, "hv": 33.0, "lv": 11.0, "z": 10.0, "cti": 150.0, "q4": 900.0, "q5": 300.0}
+    st.session_state.feeder_data = [{"l": 200.0, "c": 400.0}, {"l": 250.0, "c": 400.0}, {"l": 300.0, "c": 400.0}]
+    st.rerun()
 
-    st.divider()
-    
-    # Export options available only after calculation
-    if st.session_state.oc_txt:
-        # CSV Export
-        csv_buffer = StringIO()
-        writer = csv.writer(csv_buffer)
-        writer.writerow(["REPORT OUTPUT"])
-        writer.writerow([st.session_state.oc_txt])
-        writer.writerow([st.session_state.ef_txt])
-        st.download_button("Save Tabulated CSV", data=csv_buffer.getvalue(), file_name="NEA_Report.csv", mime="text/csv")
+if selected_menu == "Reset":
+    st.session_state.sys_vars = {k: 0.0 for k in st.session_state.sys_vars}
+    st.session_state.feeder_data = []
+    st.session_state.oc_report = ""
+    st.session_state.ef_report = ""
+    st.rerun()
 
-        # PDF Export
-        if FPDF:
-            pdf = FPDF()
-            pdf.add_page()
-            pdf.set_font("Courier", size=10)
-            full_text = st.session_state.oc_txt + "\n" + st.session_state.ef_txt
-            for line in full_text.split('\n'):
-                pdf.cell(200, 7, txt=line, ln=True)
-            pdf_bytes = pdf.output(dest='S').encode('latin-1')
-            st.download_button("Save PDF", data=pdf_bytes, file_name="NEA_Report.pdf", mime="application/pdf")
-
-# --- Main GUI Structure ---
+# --- Main GUI Header ---
 st.title("Nepal Electricity Authority (NEA) Grid Protection Coordination Tool")
 
-# Transformer & System Data (Inputs) [cite: 7, 8]
+# Transformer & System Data Section [cite: 8]
 st.subheader("Transformer & System Data (Inputs)")
-col1, col2, col3, col4 = st.columns(4)
-with col1:
+c1, c2, c3, c4 = st.columns(4)
+with c1:
     mva = st.number_input("MVA", value=float(st.session_state.sys_vars["mva"]))
     hv = st.number_input("HV (kV)", value=float(st.session_state.sys_vars["hv"]))
-with col2:
+with c2:
     lv = st.number_input("LV (kV)", value=float(st.session_state.sys_vars["lv"]))
     z = st.number_input("Z%", value=float(st.session_state.sys_vars["z"]))
-with col3:
+with c3:
     cti = st.number_input("CTI (ms)", value=float(st.session_state.sys_vars["cti"]))
-    q4 = st.number_input("Q4 CT", value=float(st.session_state.sys_vars["q4"]))
-with col4:
-    q5 = st.number_input("Q5 CT", value=float(st.session_state.sys_vars["q5"]))
+    q4_ct = st.number_input("Q4 CT", value=float(st.session_state.sys_vars["q4"]))
+with c4:
+    q5_ct = st.number_input("Q5 CT", value=float(st.session_state.sys_vars["q5"]))
 
-# Feeder Configuration [cite: 9, 10]
+# Feeder Configuration Section [cite: 10, 14]
 st.subheader("Feeder Configuration")
-num_feeders = st.number_input("No. of Feeders:", min_value=1, step=1, value=len(st.session_state.feeder_data))
+num_feeders = st.number_input("No. of Feeders:", min_value=0, step=1, value=len(st.session_state.feeder_data))
 
-# Adjust internal data if number of feeders changes
 if len(st.session_state.feeder_data) != num_feeders:
     st.session_state.feeder_data = [{"l": 0.0, "c": 0.0} for _ in range(int(num_feeders))]
 
-current_feeder_input = []
+current_feeders = []
 total_load = 0.0
 
 for i in range(int(num_feeders)):
-    fcol1, fcol2 = st.columns(2)
-    with fcol1:
-        l_in = st.number_input(f"Q{i+1} Load (A):", value=st.session_state.feeder_data[i]["l"], key=f"l{i}")
-    with fcol2:
-        c_in = st.number_input(f"Q{i+1} CT Ratio:", value=st.session_state.feeder_data[i]["c"], key=f"c{i}")
+    f1, f2 = st.columns(2)
+    with f1:
+        l_val = st.number_input(f"Q{i+1} Load (A):", value=st.session_state.feeder_data[i]["l"], key=f"l{i}")
+    with f2:
+        c_val = st.number_input(f"Q{i+1} CT Ratio:", value=st.session_state.feeder_data[i]["c"], key=f"c{i}")
     
-    if c_in < l_in and c_in > 0:
-        st.warning(f"ALERT: Feeder Q{i+1} CT ({c_in}A) is less than Load ({l_in}A)") [cite: 21]
+    if c_val < l_val and c_val > 0:
+        st.warning(f"Feeder Q{i+1} CT ({c_val}A) is less than Load ({l_val}A)")
     
-    total_load += l_in
-    current_feeder_input.append({"l": l_in, "c": c_in})
+    total_load += l_val
+    current_feeders.append({"l": l_val, "c": c_val})
 
-st.markdown(f"**Total Connected Load: {round(total_load, 2)} A**") [cite: 16]
+st.markdown(f"**Total Connected Load: {round(total_load, 2)} A**")
 
-# --- Calculation Logic (Exact Match to Your Code) --- [cite: 17, 18, 19]
-if st.button("RUN CALCULATION"):
+# --- Export Logic (Triggered by Menu) ---
+if selected_menu == "Save Tabulated CSV" and st.session_state.oc_report:
+    combined_csv = f"Overcurrent Report\n{st.session_state.oc_report}\n\nEarth Fault Report\n{st.session_state.ef_report}"
+    st.download_button("Click to Download CSV", data=combined_csv, file_name="NEA_Coordination.csv", mime="text/csv")
+
+if selected_menu == "Save PDF" and st.session_state.oc_report:
+    if FPDF:
+        pdf = FPDF()
+        pdf.add_page()
+        pdf.set_font("Courier", size=10)
+        report_text = st.session_state.oc_report + "\n" + st.session_state.ef_report
+        for line in report_text.split('\n'):
+            pdf.cell(200, 7, txt=line, ln=True)
+        pdf_output = pdf.output(dest='S').encode('latin-1')
+        st.download_button("Click to Download PDF", data=pdf_output, file_name="NEA_Coordination.pdf", mime="application/pdf")
+
+# --- Calculation Logic [cite: 17, 18, 19, 23, 24, 30, 31, 32] ---
+if st.button("RUN CALCULATION", type="primary"):
     if cti < 120:
-        st.error("CTI Error: CTI must be greater than or equal to 120ms.") [cite: 17]
+        st.error("CTI Error: CTI must be greater than or equal to 120ms.")
     else:
         try:
-            cti_s = cti / 1000 [cite: 18]
-            flc_lv = round((mva * 1000) / (math.sqrt(3) * lv), 2) [cite: 19]
-            flc_hv = round((mva * 1000) / (math.sqrt(3) * hv), 2) [cite: 19]
-            isc_lv = round(flc_lv / (z / 100), 2) [cite: 19]
-            if_lv = round(isc_lv * 0.9, 2) [cite: 19]
-            if_hv = round(if_lv / (hv / lv), 2) [cite: 19]
+            cti_s = cti / 1000
+            flc_lv = round((mva * 1000) / (math.sqrt(3) * lv), 2)
+            flc_hv = round((mva * 1000) / (math.sqrt(3) * hv), 2)
+            isc_lv = round(flc_lv / (z / 100), 2)
+            if_lv = round(isc_lv * 0.9, 2)
+            if_hv = round(if_lv / (hv / lv), 2)
 
             f_oc, f_ef = "", ""
             max_t_oc, max_t_ef = 0.0, 0.0
 
-            for i, f in enumerate(current_feeder_input):
+            for i, f in enumerate(current_feeders):
                 l_v, ct_v = f['l'], f['c']
                 if ct_v == 0: continue
-                # OC Stage 1 & 2 [cite: 23, 24]
+                # OC
                 p_oc = round(1.1 * l_v, 2); r1 = round(p_oc/ct_v, 2)
                 t_oc = round(0.025 * (0.14 / (math.pow(max(1.05, if_lv/p_oc), 0.02) - 1)), 3)
                 max_t_oc = max(max_t_oc, t_oc)
                 p2 = round(3*l_v, 2); r2 = round(p2/ct_v, 2)
                 f_oc += f"FEEDER Q{i+1}: Load={l_v}A, CT={ct_v}\n - S1 (IDMT): Pickup={p_oc}A ({r1}*In), TMS=0.025, Time={t_oc}s\n - S2 (DT):   Pickup={p2}A ({r2}*In), Time=0.0s\n\n"
-                # EF Stage 1 & 2 [cite: 25, 26]
+                # EF
                 p_ef = round(0.15 * l_v, 2); r_ef1 = round(p_ef/ct_v, 2)
                 t_ef = round(0.025 * (0.14 / (math.pow(max(1.05, if_lv/p_ef), 0.02) - 1)), 3)
                 max_t_ef = max(max_t_ef, t_ef)
                 p_ef2 = round(1.0*l_v, 2); r_ef2 = round(p_ef2/ct_v, 2)
                 f_ef += f"FEEDER Q{i+1}: Load={l_v}A, CT={ct_v}\n - S1 (IDMT): Pickup={p_ef}A ({r_ef1}*In), TMS=0.025, Time={t_ef}s\n - S2 (DT):   Pickup={p_ef2}A ({r_ef2}*In), Time=0.0s\n\n"
 
-            # Incomer & HV Coordination [cite: 29, 30, 31, 32, 33]
+            # Coordination
             coord = [
-                ("INCOMER Q4 (LV)", q4, if_lv, 1, round(0.9*isc_lv,2), cti, max_t_oc, max_t_ef),
-                ("HV SIDE Q5 (HV)", q5, if_hv, hv/lv, round(if_hv,2), cti*2, max_t_oc+cti_s, max_t_ef+cti_s)
+                ("INCOMER Q4 (LV)", q4_ct, if_lv, 1, round(0.9*isc_lv,2), cti, max_t_oc, max_t_ef),
+                ("HV SIDE Q5 (HV)", q5_ct, if_hv, hv/lv, round(if_hv,2), cti*2, max_t_oc+cti_s, max_t_ef+cti_s)
             ]
             i_oc, i_ef = "", ""
-            for name, ct_val, fault, scale, s3, dt_ms, t_prev_oc, t_prev_ef in coord:
+            for name, ct_v, fault, scale, s3, dt_ms, t_prev_oc, t_prev_ef in coord:
                 l_cur = total_load / scale
                 t_req_oc, t_req_ef = round(t_prev_oc + cti_s, 3), round(t_prev_ef + cti_s, 3)
-                p_oc = round(1.1 * l_cur, 2); r1 = round(p_oc/ct_val, 2)
+                p_oc = round(1.1 * l_cur, 2); r1 = round(p_oc/ct_v, 2)
                 tms_oc = round(t_req_oc / (0.14 / (math.pow(max(1.05, fault/p_oc), 0.02) - 1)), 3)
-                p2 = round(3*l_cur, 2); r2 = round(p2/ct_val, 2); r3 = round(s3/ct_val, 2)
-                i_oc += f"{name}: Load={round(l_cur,2)}A, CT={ct_val}\n - S1 (IDMT): Pickup={p_oc}A ({r1}*In), TMS={tms_oc}, Time={t_req_oc}s\n - S2 (DT):   Pickup={p2}A ({r2}*In), Time={dt_ms/1000}s\n - S3 (DT):   Pickup={s3}A ({r3}*In), Time=0.0s\n\n"
-                p_ef = round(0.15 * l_cur, 2); r_ef1 = round(p_ef/ct_val, 2)
+                p2 = round(3*l_cur, 2); r2 = round(p2/ct_v, 2); r3 = round(s3/ct_v, 2)
+                i_oc += f"{name}: Load={round(l_cur,2)}A, CT={ct_v}\n - S1 (IDMT): Pickup={p_oc}A ({r1}*In), TMS={tms_oc}, Time={t_req_oc}s\n - S2 (DT):   Pickup={p2}A ({r2}*In), Time={dt_ms/1000}s\n - S3 (DT):   Pickup={s3}A ({r3}*In), Time=0.0s\n\n"
+                p_ef = round(0.15 * l_cur, 2); r_ef1 = round(p_ef/ct_v, 2)
                 tms_ef = round(t_req_ef / (0.14 / (math.pow(max(1.05, fault/p_ef), 0.02) - 1)), 3)
-                p_ef2 = round(1.0*l_cur, 2); r_ef2 = round(p_ef2/ct_val, 2); r_ef3 = round(s3/ct_val, 2)
-                i_ef += f"{name}: Load={round(l_cur,2)}A, CT={ct_val}\n - S1 (IDMT): Pickup={p_ef}A ({r_ef1}*In), TMS={tms_ef}, Time={t_req_ef}s\n - S2 (DT):   Pickup={p_ef2}A ({r_ef2}*In), Time={dt_ms/1000}s\n - S3 (DT):   Pickup={s3}A ({r_ef3}*In), Time=0.0s\n\n"
+                p_ef2 = round(1.0*l_cur, 2); r_ef2 = round(p_ef2/ct_v, 2); r_ef3 = round(s3/ct_v, 2)
+                i_ef += f"{name}: Load={round(l_cur,2)}A, CT={ct_v}\n - S1 (IDMT): Pickup={p_ef}A ({r_ef1}*In), TMS={tms_ef}, Time={t_req_ef}s\n - S2 (DT):   Pickup={p_ef2}A ({r_ef2}*In), Time={dt_ms/1000}s\n - S3 (DT):   Pickup={s3}A ({r_ef3}*In), Time=0.0s\n\n"
 
             header = f"FLC LV: {flc_lv}A | FLC HV: {flc_hv}A | Short Circuit: {isc_lv}A\n" + "="*60 + "\n"
+            st.session_state.oc_report = header + f_oc + i_oc
+            st.session_state.ef_report = header + f_ef + i_ef
+
             if total_load > flc_lv:
-                header = f"CRITICAL ALERT: TRANSFORMER OVERLOAD ({total_load}A > {flc_lv}A)\n" + header [cite: 34]
-            
-            st.session_state.oc_txt = header + f_oc + i_oc
-            st.session_state.ef_txt = header + f_ef + i_ef
+                st.error(f"CRITICAL: TRANSFORMER OVERLOAD ({total_load}A > {flc_lv}A)")
                 
         except Exception as e:
-            st.error(f"Error in calculations: {e}")
+            st.error(f"Calculation Error: {e}")
 
-# --- Output Display (Tabs) --- [cite: 11, 12]
-if st.session_state.oc_txt:
+# --- Output Tabs [cite: 12] ---
+if st.session_state.oc_report:
     tab1, tab2 = st.tabs([" Overcurrent (Phase) ", " Earth Fault (Neutral) "])
     with tab1:
-        st.code(st.session_state.oc_txt)
+        st.code(st.session_state.oc_report)
     with tab2:
-        st.code(st.session_state.ef_txt)
+        st.code(st.session_state.ef_report)
 
-st.markdown('<div class="footer">By Protection and Automation Division, GOD</div>', unsafe_allow_html=True) [cite: 12]
+st.markdown("---")
+st.caption("By Protection and Automation Division, GOD")
