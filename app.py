@@ -14,7 +14,7 @@ with col2:
     st.write("We are working hard to bring you something amazing. Stay tuned!")
     
     # Optional: Add a progress bar for visual effect
-    st.info("Development Progress: 75%")
+    st.info("Development Progress)
     # st.progress(75)
 
     # Optional: Email signup simulation
@@ -24,4 +24,5 @@ with col2:
             st.success("Thanks! We'll keep you updated.")
         else:
             st.warning("Please enter a valid email.")
+
 
