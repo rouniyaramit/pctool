@@ -18,12 +18,13 @@ with col2:
     # st.progress(75)
 
     # Optional: Email signup simulation
-    email = st.text_input("Get notified when we launch:", placeholder="rouniyaramit@gmail.com")
-    if st.button("Notify Me"):
-        if email:
-            st.success("Thanks! We'll keep you updated.")
-        else:
-            st.warning("Please enter a valid email.")
+    # email = st.text_input("Get notified when we launch:", placeholder="rouniyaramit@gmail.com")
+    # if st.button("Notify Me"):
+        # if email:
+            # st.success("Thanks! We'll keep you updated.")
+        # else:
+            # st.warning("Please enter a valid email.")
+
 
 
 
