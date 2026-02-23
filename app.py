@@ -36,13 +36,18 @@ selected_menu = option_menu(
     orientation="horizontal",
 )
 
-# --- Menu Logic (Fixed for Single Click) ---
+# --- MENU LOGIC: The "Single Click" Fix ---
+# This block clears the internal widget state so the boxes update instantly
 if selected_menu == "Preload Default Data":
     st.session_state.sys_vars = {"mva": 16.6, "hv": 33.0, "lv": 11.0, "z": 10.0, "cti": 150.0, "q4": 900.0, "q5": 300.0}
     st.session_state.feeder_data = [{"l": 200.0, "c": 400.0}, {"l": 250.0, "c": 400.0}, {"l": 300.0, "c": 400.0}]
-    # Clear widget keys to force refresh
-    for key in ["mva_k", "hv_k", "lv_k", "z_k", "cti_k", "q4_k", "q5_k"]:
-        if key in st.session_state: del st.session_state[key]
+    # Force delete widget keys to refresh UI
+    for k in ["mva_key", "hv_key", "lv_key", "z_key", "cti_key", "q4_key", "q5_key"]:
+        if k in st.session_state: del st.session_state[k]
+    # Also delete dynamic feeder keys
+    for i in range(20): 
+        if f"l{i}" in st.session_state: del st.session_state[f"l{i}"]
+        if f"c{i}" in st.session_state: del st.session_state[f"c{i}"]
     st.rerun()
 
 if selected_menu == "Reset":
@@ -50,9 +55,9 @@ if selected_menu == "Reset":
     st.session_state.feeder_data = []
     st.session_state.oc_report = ""
     st.session_state.ef_report = ""
-    # Clear all widget keys to force refresh
+    # Completely clear session state keys related to widgets
     for key in list(st.session_state.keys()):
-        if key.endswith("_k") or key.startswith("l") or key.startswith("c"):
+        if any(x in key for x in ["_key", "l", "c"]) and key not in ["sys_vars", "feeder_data"]:
             del st.session_state[key]
     st.rerun()
 
@@ -63,22 +68,21 @@ st.title("Nepal Electricity Authority (NEA) Grid Protection Coordination Tool")
 st.subheader("Transformer & System Data (Inputs)")
 c1, c2, c3, c4 = st.columns(4)
 with c1:
-    # Added 'key' to each input to allow manual clearing during Reset
-    mva = st.number_input("MVA", value=float(st.session_state.sys_vars["mva"]), key="mva_k")
-    hv = st.number_input("HV (kV)", value=float(st.session_state.sys_vars["hv"]), key="hv_k")
+    mva = st.number_input("MVA", value=float(st.session_state.sys_vars["mva"]), key="mva_key")
+    hv = st.number_input("HV (kV)", value=float(st.session_state.sys_vars["hv"]), key="hv_key")
 with c2:
-    lv = st.number_input("LV (kV)", value=float(st.session_state.sys_vars["lv"]), key="lv_k")
-    z = st.number_input("Z%", value=float(st.session_state.sys_vars["z"]), key="z_k")
+    lv = st.number_input("LV (kV)", value=float(st.session_state.sys_vars["lv"]), key="lv_key")
+    z = st.number_input("Z%", value=float(st.session_state.sys_vars["z"]), key="z_key")
 with c3:
-    cti = st.number_input("CTI (ms)", value=float(st.session_state.sys_vars["cti"]), key="cti_k")
-    q4_ct = st.number_input("Q4 CT Ratio", value=float(st.session_state.sys_vars["q4"]), key="q4_k")
-
+    cti = st.number_input("CTI (ms)", value=float(st.session_state.sys_vars["cti"]), key="cti_key")
+    q4_ct = st.number_input("Q4 CT Ratio", value=float(st.session_state.sys_vars["q4"]), key="q4_key")
 with c4:
-    q5_ct = st.number_input("Q5 CT Ratio", value=float(st.session_state.sys_vars["q5"]), key="q5_k")
+    q5_ct = st.number_input("Q5 CT Ratio", value=float(st.session_state.sys_vars["q5"]), key="q5_key")
 
 # --- Inputs: Feeder Configuration ---
 st.subheader("Feeder Configuration")
-num_feeders = st.number_input("No. of Feeders:", min_value=0, step=1, value=len(st.session_state.feeder_data))
+# We use a unique key for the number of feeders to ensure it resets to 0 or 3 correctly
+num_feeders = st.number_input("No. of Feeders:", min_value=0, step=1, value=len(st.session_state.feeder_data), key="num_f_key")
 
 # Sync session state with feeder count
 if len(st.session_state.feeder_data) != num_feeders:
@@ -89,10 +93,11 @@ total_load = 0.0
 
 for i in range(int(num_feeders)):
     f1, f2 = st.columns(2)
+    # Ensure current feeder data is used as the default value
     with f1:
-        l_val = st.number_input(f"Q{i+1} Load (A):", value=st.session_state.feeder_data[i]["l"], key=f"l{i}")
+        l_val = st.number_input(f"Q{i+1} Load (A):", value=float(st.session_state.feeder_data[i]["l"]), key=f"l{i}")
     with f2:
-        c_val = st.number_input(f"Q{i+1} CT Ratio:", value=st.session_state.feeder_data[i]["c"], key=f"c{i}")
+        c_val = st.number_input(f"Q{i+1} CT Ratio:", value=float(st.session_state.feeder_data[i]["c"]), key=f"c{i}")
     
     if c_val < l_val and c_val > 0:
         st.warning(f"Feeder Q{i+1} CT ({c_val}A) is less than Load ({l_val}A)")
@@ -135,33 +140,24 @@ if st.button("RUN CALCULATION", type="primary"):
             if_lv = round(isc_lv * 0.9, 2)
             if_hv = round(if_lv / (hv / lv), 2)
 
-            f_oc, f_ef = "" , ""
+            f_oc, f_ef = "", ""
             max_t_oc, max_t_ef = 0.0, 0.0
 
-            # Feeder Level Calculations
             for i, f in enumerate(current_feeders):
                 l_v, ct_v = f['l'], f['c']
                 if ct_v == 0: continue
-                
-                # Overcurrent (OC)
-                p_oc = round(1.1 * l_v, 2)
-                r1 = round(p_oc/ct_v, 2)
+                p_oc = round(1.1 * l_v, 2); r1 = round(p_oc/ct_v, 2)
                 t_oc = round(0.025 * (0.14 / (math.pow(max(1.05, if_lv/p_oc), 0.02) - 1)), 3)
                 max_t_oc = max(max_t_oc, t_oc)
-                p2 = round(3 * l_v, 2)
-                r2 = round(p2/ct_v, 2)
+                p2 = round(3 * l_v, 2); r2 = round(p2/ct_v, 2)
                 f_oc += f"FEEDER Q{i+1}: Load={l_v}A, CT={ct_v}\n - S1 (IDMT): Pickup={p_oc}A ({r1}*In), TMS=0.025, Time={t_oc}s\n - S2 (DT):   Pickup={p2}A ({r2}*In), Time=0.0s\n\n"
                 
-                # Earth Fault (EF)
-                p_ef = round(0.15 * l_v, 2)
-                r_ef1 = round(p_ef/ct_v, 2)
+                p_ef = round(0.15 * l_v, 2); r_ef1 = round(p_ef/ct_v, 2)
                 t_ef = round(0.025 * (0.14 / (math.pow(max(1.05, if_lv/p_ef), 0.02) - 1)), 3)
                 max_t_ef = max(max_t_ef, t_ef)
-                p_ef2 = round(1.0 * l_v, 2)
-                r_ef2 = round(p_ef2/ct_v, 2)
+                p_ef2 = round(1.0 * l_v, 2); r_ef2 = round(p_ef2/ct_v, 2)
                 f_ef += f"FEEDER Q{i+1}: Load={l_v}A, CT={ct_v}\n - S1 (IDMT): Pickup={p_ef}A ({r_ef1}*In), TMS=0.025, Time={t_ef}s\n - S2 (DT):   Pickup={p_ef2}A ({r_ef2}*In), Time=0.0s\n\n"
 
-            # Incomer and HV Side Coordination
             coord = [
                 ("INCOMER Q4 (LV)", q4_ct, if_lv, 1, round(0.9 * isc_lv, 2), cti, max_t_oc, max_t_ef),
                 ("HV SIDE Q5 (HV)", q5_ct, if_hv, hv/lv, round(if_hv, 2), cti * 2, max_t_oc + cti_s, max_t_ef + cti_s)
@@ -171,30 +167,20 @@ if st.button("RUN CALCULATION", type="primary"):
             for name, ct_v, fault, scale, s3, dt_ms, t_prev_oc, t_prev_ef in coord:
                 if ct_v == 0: continue
                 l_cur = total_load / scale
-                
-                # OC Incomer
-                t_req_oc = round(t_prev_oc + cti_s, 3)
-                p_oc = round(1.1 * l_cur, 2)
-                r1 = round(p_oc/ct_v, 2)
+                t_req_oc = round(t_prev_oc + cti_s, 3); p_oc = round(1.1 * l_cur, 2); r1 = round(p_oc/ct_v, 2)
                 tms_oc = round(t_req_oc / (0.14 / (math.pow(max(1.05, fault/p_oc), 0.02) - 1)), 3)
                 p2 = round(3 * l_cur, 2); r2 = round(p2/ct_v, 2); r3 = round(s3/ct_v, 2)
                 i_oc += f"{name}: Load={round(l_cur,2)}A, CT={ct_v}\n - S1 (IDMT): Pickup={p_oc}A ({r1}*In), TMS={tms_oc}, Time={t_req_oc}s\n - S2 (DT):   Pickup={p2}A ({r2}*In), Time={dt_ms/1000}s\n - S3 (DT):   Pickup={s3}A ({r3}*In), Time=0.0s\n\n"
                 
-                # EF Incomer
-                t_req_ef = round(t_prev_ef + cti_s, 3)
-                p_ef = round(0.15 * l_cur, 2)
-                r_ef1 = round(p_ef/ct_v, 2)
+                t_req_ef = round(t_prev_ef + cti_s, 3); p_ef = round(0.15 * l_cur, 2); r_ef1 = round(p_ef/ct_v, 2)
                 tms_ef = round(t_req_ef / (0.14 / (math.pow(max(1.05, fault/p_ef), 0.02) - 1)), 3)
                 p_ef2 = round(1.0 * l_cur, 2); r_ef2 = round(p_ef2/ct_v, 2); r_ef3 = round(s3/ct_v, 2)
                 i_ef += f"{name}: Load={round(l_cur,2)}A, CT={ct_v}\n - S1 (IDMT): Pickup={p_ef}A ({r_ef1}*In), TMS={tms_ef}, Time={t_req_ef}s\n - S2 (DT):   Pickup={p_ef2}A ({r_ef2}*In), Time={dt_ms/1000}s\n - S3 (DT):   Pickup={s3}A ({r_ef3}*In), Time=0.0s\n\n"
 
-            # Finalize Reports
             header = f"FLC LV: {flc_lv}A | FLC HV: {flc_hv}A | Short Circuit: {isc_lv}A\n" + "="*60 + "\n"
             st.session_state.oc_report = header + f_oc + i_oc
             st.session_state.ef_report = header + f_ef + i_ef
-
-            if total_load > flc_lv:
-                st.error(f"CRITICAL: TRANSFORMER OVERLOAD ({total_load}A > {flc_lv}A)")
+            if total_load > flc_lv: st.error(f"CRITICAL: TRANSFORMER OVERLOAD ({total_load}A > {flc_lv}A)")
                 
         except Exception as e:
             st.error(f"Calculation Error: {e}")
@@ -202,10 +188,8 @@ if st.button("RUN CALCULATION", type="primary"):
 # --- Output Display ---
 if st.session_state.oc_report:
     tab1, tab2 = st.tabs([" Overcurrent (Phase) ", " Earth Fault (Neutral) "])
-    with tab1:
-        st.code(st.session_state.oc_report, language="text")
-    with tab2:
-        st.code(st.session_state.ef_report, language="text")
+    with tab1: st.code(st.session_state.oc_report, language="text")
+    with tab2: st.code(st.session_state.ef_report, language="text")
 
 st.markdown("---")
 st.caption("By Protection and Automation Division, GOD")
