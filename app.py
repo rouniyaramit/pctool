@@ -36,7 +36,7 @@ selected_menu = option_menu(
     orientation="horizontal",
 )
 
-# --- Menu Logic ---
+# --- Menu Logic (Fixed with st.rerun) ---
 if selected_menu == "Preload Default Data":
     st.session_state.sys_vars = {"mva": 16.6, "hv": 33.0, "lv": 11.0, "z": 10.0, "cti": 150.0, "q4": 900.0, "q5": 300.0}
     st.session_state.feeder_data = [{"l": 200.0, "c": 400.0}, {"l": 250.0, "c": 400.0}, {"l": 300.0, "c": 400.0}]
@@ -201,5 +201,3 @@ if st.session_state.oc_report:
 
 st.markdown("---")
 st.caption("By Protection and Automation Division, GOD")
-
-
