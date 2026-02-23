@@ -25,9 +25,6 @@ if 'oc_report' not in st.session_state:
     st.session_state.oc_report = ""
 if 'ef_report' not in st.session_state:
     st.session_state.ef_report = ""
-# Version counter to force single-click UI refresh
-if 'v' not in st.session_state:
-    st.session_state.v = 0
 
 # --- Navigation Menu ---
 selected_menu = option_menu(
@@ -43,7 +40,6 @@ selected_menu = option_menu(
 if selected_menu == "Preload Default Data":
     st.session_state.sys_vars = {"mva": 16.6, "hv": 33.0, "lv": 11.0, "z": 10.0, "cti": 150.0, "q4": 900.0, "q5": 300.0}
     st.session_state.feeder_data = [{"l": 200.0, "c": 400.0}, {"l": 250.0, "c": 400.0}, {"l": 300.0, "c": 400.0}]
-    st.session_state.v += 1  # Increment version to force fresh widgets
     st.rerun()
 
 if selected_menu == "Reset":
@@ -51,7 +47,6 @@ if selected_menu == "Reset":
     st.session_state.feeder_data = []
     st.session_state.oc_report = ""
     st.session_state.ef_report = ""
-    st.session_state.v += 1  # Increment version to force fresh widgets
     st.rerun()
 
 # --- Main Application Header ---
@@ -60,24 +55,22 @@ st.title("Nepal Electricity Authority (NEA) Grid Protection Coordination Tool")
 # --- Inputs: Transformer & System Data ---
 st.subheader("Transformer & System Data (Inputs)")
 c1, c2, c3, c4 = st.columns(4)
-v = st.session_state.v # Local version reference for keys
-
 with c1:
-    mva = st.number_input("MVA", value=float(st.session_state.sys_vars["mva"]), key=f"mva{v}")
-    hv = st.number_input("HV (kV)", value=float(st.session_state.sys_vars["hv"]), key=f"hv{v}")
+    mva = st.number_input("MVA", value=float(st.session_state.sys_vars["mva"]))
+    hv = st.number_input("HV (kV)", value=float(st.session_state.sys_vars["hv"]))
 with c2:
-    lv = st.number_input("LV (kV)", value=float(st.session_state.sys_vars["lv"]), key=f"lv{v}")
-    z = st.number_input("Z%", value=float(st.session_state.sys_vars["z"]), key=f"z{v}")
+    lv = st.number_input("LV (kV)", value=float(st.session_state.sys_vars["lv"]))
+    z = st.number_input("Z%", value=float(st.session_state.sys_vars["z"]))
 with c3:
-    cti = st.number_input("CTI (ms)", value=float(st.session_state.sys_vars["cti"]), key=f"cti{v}")
-    q4_ct = st.number_input("Q4 CT Ratio", value=float(st.session_state.sys_vars["q4"]), key=f"q4{v}")
+    cti = st.number_input("CTI (ms)", value=float(st.session_state.sys_vars["cti"]))
+    q4_ct = st.number_input("Q4 CT Ratio", value=float(st.session_state.sys_vars["q4"]))
 
 with c4:
-    q5_ct = st.number_input("Q5 CT Ratio", value=float(st.session_state.sys_vars["q5"]), key=f"q5{v}")
+    q5_ct = st.number_input("Q5 CT Ratio", value=float(st.session_state.sys_vars["q5"]))
 
 # --- Inputs: Feeder Configuration ---
 st.subheader("Feeder Configuration")
-num_feeders = st.number_input("No. of Feeders:", min_value=0, step=1, value=len(st.session_state.feeder_data), key=f"nf{v}")
+num_feeders = st.number_input("No. of Feeders:", min_value=0, step=1, value=len(st.session_state.feeder_data))
 
 # Sync session state with feeder count
 if len(st.session_state.feeder_data) != num_feeders:
@@ -89,9 +82,9 @@ total_load = 0.0
 for i in range(int(num_feeders)):
     f1, f2 = st.columns(2)
     with f1:
-        l_val = st.number_input(f"Q{i+1} Load (A):", value=st.session_state.feeder_data[i]["l"], key=f"l{i}_{v}")
+        l_val = st.number_input(f"Q{i+1} Load (A):", value=st.session_state.feeder_data[i]["l"], key=f"l{i}")
     with f2:
-        c_val = st.number_input(f"Q{i+1} CT Ratio:", value=st.session_state.feeder_data[i]["c"], key=f"c{i}_{v}")
+        c_val = st.number_input(f"Q{i+1} CT Ratio:", value=st.session_state.feeder_data[i]["c"], key=f"c{i}")
     
     if c_val < l_val and c_val > 0:
         st.warning(f"Feeder Q{i+1} CT ({c_val}A) is less than Load ({l_val}A)")
@@ -208,3 +201,5 @@ if st.session_state.oc_report:
 
 st.markdown("---")
 st.caption("By Protection and Automation Division, GOD")
+
+
