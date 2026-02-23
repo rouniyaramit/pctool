@@ -26,6 +26,22 @@ if 'oc_report' not in st.session_state:
 if 'ef_report' not in st.session_state:
     st.session_state.ef_report = ""
 
+# --- Callback Function for Single-Click Action ---
+def handle_menu_selection():
+    # This runs the moment the user clicks a menu item, before the rest of the page loads
+    sel = st.session_state.main_menu
+    
+    if sel == "Preload Default Data":
+        st.session_state.sys_vars = {"mva": 16.6, "hv": 33.0, "lv": 11.0, "z": 10.0, "cti": 150.0, "q4": 900.0, "q5": 300.0}
+        st.session_state.feeder_data = [{"l": 200.0, "c": 400.0}, {"l": 250.0, "c": 400.0}, {"l": 300.0, "c": 400.0}]
+        # No rerun needed here as it's a callback
+        
+    elif sel == "Reset":
+        st.session_state.sys_vars = {k: 0.0 for k in st.session_state.sys_vars}
+        st.session_state.feeder_data = []
+        st.session_state.oc_report = ""
+        st.session_state.ef_report = ""
+
 # --- Navigation Menu ---
 selected_menu = option_menu(
     menu_title=None, 
@@ -34,20 +50,9 @@ selected_menu = option_menu(
     menu_icon="cast", 
     default_index=0,
     orientation="horizontal",
+    key="main_menu",
+    on_change=handle_menu_selection # This is the fix for single-click behavior
 )
-
-# --- Menu Logic (Fixed with st.rerun) ---
-if selected_menu == "Preload Default Data":
-    st.session_state.sys_vars = {"mva": 16.6, "hv": 33.0, "lv": 11.0, "z": 10.0, "cti": 150.0, "q4": 900.0, "q5": 300.0}
-    st.session_state.feeder_data = [{"l": 200.0, "c": 400.0}, {"l": 250.0, "c": 400.0}, {"l": 300.0, "c": 400.0}]
-    st.rerun()
-
-if selected_menu == "Reset":
-    st.session_state.sys_vars = {k: 0.0 for k in st.session_state.sys_vars}
-    st.session_state.feeder_data = []
-    st.session_state.oc_report = ""
-    st.session_state.ef_report = ""
-    st.rerun()
 
 # --- Main Application Header ---
 st.title("Nepal Electricity Authority (NEA) Grid Protection Coordination Tool")
@@ -64,7 +69,6 @@ with c2:
 with c3:
     cti = st.number_input("CTI (ms)", value=float(st.session_state.sys_vars["cti"]))
     q4_ct = st.number_input("Q4 CT Ratio", value=float(st.session_state.sys_vars["q4"]))
-
 with c4:
     q5_ct = st.number_input("Q5 CT Ratio", value=float(st.session_state.sys_vars["q5"]))
 
@@ -82,9 +86,10 @@ total_load = 0.0
 for i in range(int(num_feeders)):
     f1, f2 = st.columns(2)
     with f1:
-        l_val = st.number_input(f"Q{i+1} Load (A):", value=st.session_state.feeder_data[i]["l"], key=f"l{i}")
+        # We use st.session_state.feeder_data[i] as the value to ensure it updates on Reset
+        l_val = st.number_input(f"Q{i+1} Load (A):", value=float(st.session_state.feeder_data[i]["l"]), key=f"input_l{i}")
     with f2:
-        c_val = st.number_input(f"Q{i+1} CT Ratio:", value=st.session_state.feeder_data[i]["c"], key=f"c{i}")
+        c_val = st.number_input(f"Q{i+1} CT Ratio:", value=float(st.session_state.feeder_data[i]["c"]), key=f"input_c{i}")
     
     if c_val < l_val and c_val > 0:
         st.warning(f"Feeder Q{i+1} CT ({c_val}A) is less than Load ({l_val}A)")
