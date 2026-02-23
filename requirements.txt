@@ -2,6 +2,7 @@ streamlit
 pandas
 numpy
 matplotlib
-fpdf
+fpdf2
 streamlit-option-menu
+
 
