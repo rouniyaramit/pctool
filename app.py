@@ -64,10 +64,7 @@ with c2:
 with c3:
     cti = st.number_input("CTI (ms)", value=float(st.session_state.sys_vars["cti"]))
     q4_ct = st.number_input("Q4 CT Ratio", value=float(st.session_state.sys_vars["q4"]))
-     if q4_ct < total_load:
-                self.sys_entries['q4'].config(bg="#ffcccc")
-                ct_alerts.append(f"ALERT: Q4 Incomer CT ({q4_ct}A) is less than Total Load ({total_load}A)\n")
-            else: self.sys_entries['q4'].config(bg="white")
+
 with c4:
     q5_ct = st.number_input("Q5 CT Ratio", value=float(st.session_state.sys_vars["q5"]))
 
@@ -204,4 +201,5 @@ if st.session_state.oc_report:
 
 st.markdown("---")
 st.caption("By Protection and Automation Division, GOD")
+
 
