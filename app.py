@@ -68,6 +68,9 @@ st.markdown("""
         font-size: 12px;
         border: 1px solid #ddd;
         margin-top: 10px;
+        white-space: pre-wrap;
+        max-height: 600px;
+        overflow-y: auto;
     }
     .stButton > button {
         background-color: #0056b3;
@@ -77,6 +80,10 @@ st.markdown("""
     }
     .stButton > button:hover {
         background-color: #004494;
+    }
+    div[data-testid="stNumberInput"] label {
+        font-size: 12px;
+        font-weight: normal;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -90,6 +97,8 @@ if 'ef_report' not in st.session_state:
     st.session_state.ef_report = ""
 if 'total_load' not in st.session_state:
     st.session_state.total_load = 0.0
+if 'calculation_done' not in st.session_state:
+    st.session_state.calculation_done = False
 
 # Header with logo
 col1, col2 = st.columns([3, 1])
@@ -119,6 +128,9 @@ with st.sidebar:
             st.session_state.reset_data = True
     
     st.markdown("---")
+    if st.session_state.calculation_done:
+        st.info("✅ Calculation completed")
+    
     st.markdown('<p class="footer">By Protection and Automation Division, GOD</p>', unsafe_allow_html=True)
 
 # Transformer & System Data Section
@@ -128,19 +140,19 @@ st.markdown('<p class="sub-header">Transformer & System Data (Inputs)</p>', unsa
 col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
 
 with col1:
-    mva = st.number_input("MVA", min_value=0.0, value=16.6, step=0.1, format="%.2f")
+    mva = st.number_input("MVA", min_value=0.0, value=16.6, step=0.1, format="%.2f", key="mva")
 with col2:
-    hv = st.number_input("HV (kV)", min_value=0.0, value=33.0, step=1.0, format="%.2f")
+    hv = st.number_input("HV (kV)", min_value=0.0, value=33.0, step=1.0, format="%.2f", key="hv")
 with col3:
-    lv = st.number_input("LV (kV)", min_value=0.0, value=11.0, step=1.0, format="%.2f")
+    lv = st.number_input("LV (kV)", min_value=0.0, value=11.0, step=1.0, format="%.2f", key="lv")
 with col4:
-    z = st.number_input("Z%", min_value=0.0, value=10.0, step=0.1, format="%.2f")
+    z = st.number_input("Z%", min_value=0.0, value=10.0, step=0.1, format="%.2f", key="z")
 with col5:
-    cti = st.number_input("CTI (ms)", min_value=120.0, value=150.0, step=10.0, format="%.0f")
+    cti = st.number_input("CTI (ms)", min_value=120.0, value=150.0, step=10.0, format="%.0f", key="cti")
 with col6:
-    q4_ct = st.number_input("Q4 CT", min_value=0.0, value=900.0, step=50.0, format="%.0f")
+    q4_ct = st.number_input("Q4 CT", min_value=0.0, value=900.0, step=50.0, format="%.0f", key="q4_ct")
 with col7:
-    q5_ct = st.number_input("Q5 CT", min_value=0.0, value=300.0, step=50.0, format="%.0f")
+    q5_ct = st.number_input("Q5 CT", min_value=0.0, value=300.0, step=50.0, format="%.0f", key="q5_ct")
 
 # Feeder Configuration Section
 st.markdown('<p class="sub-header">Feeder Configuration</p>', unsafe_allow_html=True)
@@ -158,23 +170,29 @@ with col2:
 feeder_data = []
 total_load = 0.0
 
+# Default load values for preload
+default_loads = [200, 250, 300]
+default_cts = [400, 400, 400]
+
 for i in range(num_feeders):
     cols = st.columns([1, 2, 1, 2, 4])
     with cols[0]:
         st.markdown(f"**Q{i+1}**")
     with cols[1]:
-        load = st.number_input(f"Load (A)", min_value=0.0, value=200.0 if i == 0 else 250.0 if i == 1 else 300.0, 
-                               step=10.0, key=f"load_{i}", format="%.2f")
+        default_load = default_loads[i] if i < len(default_loads) else 200
+        load = st.number_input(f"Load (A)", min_value=0.0, value=float(default_load), 
+                               step=10.0, key=f"load_{i}", format="%.2f", label_visibility="collapsed")
         total_load += load
     with cols[2]:
-        st.markdown("**CT Ratio:**")
+        st.markdown("**CT:**")
     with cols[3]:
-        ct = st.number_input(f"CT Ratio", min_value=0.0, value=400.0, 
-                            step=50.0, key=f"ct_{i}", format="%.0f")
+        default_ct = default_cts[i] if i < len(default_cts) else 400
+        ct = st.number_input(f"CT Ratio", min_value=0.0, value=float(default_ct), 
+                            step=50.0, key=f"ct_{i}", format="%.0f", label_visibility="collapsed")
     with cols[4]:
         # CT alert check
         if ct < load:
-            st.markdown(f'<p style="color:red; font-weight:bold;">⚠ CT < Load</p>', unsafe_allow_html=True)
+            st.markdown(f'<p style="color:red; font-weight:bold;">⚠ CT &lt; Load</p>', unsafe_allow_html=True)
         else:
             st.markdown("✓")
     
@@ -250,22 +268,29 @@ if st.button("RUN CALCULATION", key="calculate", use_container_width=True):
             if q5_ct < hv_load:
                 ct_alerts.append(f"ALERT: Q5 HV CT ({q5_ct}A) is less than HV Load ({round(hv_load,2)}A)")
             
-            # Coordination data
+            # Coordination data for Q4 and Q5
+            # Format: (name, ct_value, fault_current, scale, s3_pickup, dt_time, prev_oc_time, prev_ef_time)
             coord_data = [
-                ("INCOMER Q4 (LV)", q4_ct, if_lv, 1, round(0.9*isc_lv,2), cti, max_t_oc, max_t_ef),
-                ("HV SIDE Q5 (HV)", q5_ct, if_hv, hv/lv, round(if_hv,2), cti*2, max_t_oc+cti_s, max_t_ef+cti_s)
+                ("INCOMER Q4 (LV Side)", q4_ct, if_lv, 1, round(0.9*isc_lv,2), cti, max_t_oc, max_t_ef),
+                ("HV SIDE Q5 (HV Side)", q5_ct, if_hv, hv/lv, round(if_hv,2), cti*2, max_t_oc + cti_s, max_t_ef + cti_s)
             ]
             
-            # Process coordination data
+            # Process coordination data for Q4 and Q5
             for name, ct_val, fault, scale, s3, dt_ms, t_prev_oc, t_prev_ef in coord_data:
                 l_cur = total_load / scale
                 t_req_oc = round(t_prev_oc + cti_s, 3)
                 t_req_ef = round(t_prev_ef + cti_s, 3)
                 
-                # Overcurrent
+                # Overcurrent calculations for incomer/HV
                 p_oc = round(1.1 * l_cur, 2)
                 r1 = round(p_oc/ct_val, 2)
-                tms_oc = round(t_req_oc / (0.14 / (math.pow(max(1.05, fault/p_oc), 0.02) - 1)), 3)
+                # Calculate TMS for IDMT to achieve required time
+                denominator = max(1.05, fault/p_oc)
+                if denominator > 1:
+                    tms_oc = round(t_req_oc / (0.14 / (math.pow(denominator, 0.02) - 1)), 3)
+                else:
+                    tms_oc = 0
+                
                 p2 = round(3*l_cur, 2)
                 r2 = round(p2/ct_val, 2)
                 r3 = round(s3/ct_val, 2)
@@ -276,10 +301,15 @@ if st.button("RUN CALCULATION", key="calculate", use_container_width=True):
                 oc_report_lines.append(f" - S3 (DT):   Pickup={s3}A ({r3}*In), Time=0.0s")
                 oc_report_lines.append("")
                 
-                # Earth fault
+                # Earth fault calculations for incomer/HV
                 p_ef = round(0.15 * l_cur, 2)
                 r_ef1 = round(p_ef/ct_val, 2)
-                tms_ef = round(t_req_ef / (0.14 / (math.pow(max(1.05, fault/p_ef), 0.02) - 1)), 3)
+                denominator_ef = max(1.05, fault/p_ef)
+                if denominator_ef > 1:
+                    tms_ef = round(t_req_ef / (0.14 / (math.pow(denominator_ef, 0.02) - 1)), 3)
+                else:
+                    tms_ef = 0
+                
                 p_ef2 = round(1.0*l_cur, 2)
                 r_ef2 = round(p_ef2/ct_val, 2)
                 r_ef3 = round(s3/ct_val, 2)
@@ -291,7 +321,7 @@ if st.button("RUN CALCULATION", key="calculate", use_container_width=True):
                 ef_report_lines.append("")
             
             # Header
-            header = f"FLC LV: {flc_lv}A | FLC HV: {flc_hv}A | Short Circuit: {isc_lv}A\n" + "="*60
+            header = f"FLC LV: {flc_lv}A | FLC HV: {flc_hv}A | Short Circuit LV: {isc_lv}A | If LV: {if_lv}A | If HV: {if_hv}A\n" + "="*80
             
             # Store reports in session state
             full_oc_report = []
@@ -299,30 +329,41 @@ if st.button("RUN CALCULATION", key="calculate", use_container_width=True):
             
             # Add alerts
             if total_load > flc_lv:
-                full_oc_report.append(f"CRITICAL ALERT: TRANSFORMER OVERLOAD ({total_load}A > {flc_lv}A)")
-                full_ef_report.append(f"CRITICAL ALERT: TRANSFORMER OVERLOAD ({total_load}A > {flc_lv}A)")
+                alert_msg = f"CRITICAL ALERT: TRANSFORMER OVERLOAD ({total_load}A > {flc_lv}A)"
+                full_oc_report.append(alert_msg)
+                full_ef_report.append(alert_msg)
+                full_oc_report.append("")
+                full_ef_report.append("")
             
-            full_oc_report.extend(ct_alerts)
-            full_ef_report.extend(ct_alerts)
+            if ct_alerts:
+                for alert in ct_alerts:
+                    full_oc_report.append(alert)
+                    full_ef_report.append(alert)
+                full_oc_report.append("")
+                full_ef_report.append("")
             
             full_oc_report.append(header)
             full_ef_report.append(header)
+            full_oc_report.append("")
+            full_ef_report.append("")
             
             full_oc_report.extend(oc_report_lines)
             full_ef_report.extend(ef_report_lines)
             
             st.session_state.oc_report = "\n".join(full_oc_report)
             st.session_state.ef_report = "\n".join(full_ef_report)
+            st.session_state.calculation_done = True
             
             # Display success message
-            st.success("Calculation completed successfully!")
+            st.success("✅ Calculation completed successfully!")
 
     except Exception as e:
-        st.error(f"Invalid Inputs: {e}")
+        st.error(f"❌ Invalid Inputs: {e}")
+        st.exception(e)
 
 # Display Reports in Tabs
 if st.session_state.oc_report or st.session_state.ef_report:
-    tab1, tab2 = st.tabs(["Overcurrent (Phase)", "Earth Fault (Neutral)"])
+    tab1, tab2 = st.tabs(["🔴 Overcurrent (Phase)", "🟢 Earth Fault (Neutral)"])
     
     with tab1:
         st.markdown(f'<div class="report-box">{st.session_state.oc_report}</div>', unsafe_allow_html=True)
@@ -334,6 +375,10 @@ if st.session_state.oc_report or st.session_state.ef_report:
 if 'preload_data' in st.session_state and st.session_state.preload_data:
     st.session_state.preload_data = False
     # Data is preloaded through default values in number inputs
+    # Clear reports and recalculate
+    st.session_state.oc_report = ""
+    st.session_state.ef_report = ""
+    st.session_state.calculation_done = False
     st.rerun()
 
 if 'reset_data' in st.session_state and st.session_state.reset_data:
@@ -341,69 +386,126 @@ if 'reset_data' in st.session_state and st.session_state.reset_data:
     # Clear reports
     st.session_state.oc_report = ""
     st.session_state.ef_report = ""
-    # Reset number inputs to default values
-    # This will be handled by rerunning
+    st.session_state.calculation_done = False
     st.rerun()
 
 if 'save_csv' in st.session_state and st.session_state.save_csv:
     st.session_state.save_csv = False
     if st.session_state.oc_report and st.session_state.ef_report:
-        # Create CSV in memory
-        csv_buffer = io.StringIO()
-        writer = csv.writer(csv_buffer)
-        writer.writerow(["EQUIPMENT", "FAULT TYPE", "STAGE", "PICKUP (A)", "RATIO (*In)", "TMS/DELAY", "TIME (s)"])
-        
-        def parse_and_write(txt, fault_type):
-            curr = ""
-            for line in txt.split('\n'):
-                if ":" in line and "Load" in line:
-                    curr = line.split(":")[0]
-                elif "- S" in line:
-                    parts = line.split(":")
-                    if len(parts) > 1:
-                        stage = parts[0].strip("- ")
-                        details = parts[1].split(",")
-                        pick_raw = details[0].split("=")[1].strip()
-                        val = pick_raw.split("(")[0].strip()
-                        rat = pick_raw.split("(")[1].replace("*In)", "").strip() if "(" in pick_raw else ""
-                        tms = details[1].split("=")[1].strip()
-                        op = details[2].split("=")[1].strip() if len(details) > 2 else "0.0s"
-                        writer.writerow([curr, fault_type, stage, val, rat, tms, op])
-        
-        parse_and_write(st.session_state.oc_report, "Overcurrent")
-        parse_and_write(st.session_state.ef_report, "Earth Fault")
-        
-        # Create download button
-        csv_data = csv_buffer.getvalue()
-        b64 = base64.b64encode(csv_data.encode()).decode()
-        href = f'<a href="data:file/csv;base64,{b64}" download="protection_coordination.csv">Click here to download CSV</a>'
-        st.markdown(href, unsafe_allow_html=True)
-        st.success("CSV file ready for download!")
+        try:
+            # Create CSV in memory
+            csv_buffer = io.StringIO()
+            writer = csv.writer(csv_buffer)
+            writer.writerow(["EQUIPMENT", "FAULT TYPE", "STAGE", "PICKUP (A)", "RATIO (*In)", "TMS/DELAY", "TIME (s)"])
+            
+            def parse_and_write(txt, fault_type):
+                curr = ""
+                lines = txt.split('\n')
+                for line in lines:
+                    if ":" in line and "Load" in line:
+                        curr = line.split(":")[0].strip()
+                    elif "- S" in line:
+                        try:
+                            # Parse line like "- S1 (IDMT): Pickup=220A (0.55*In), TMS=0.025, Time=0.123s"
+                            parts = line.split(":")
+                            if len(parts) > 1:
+                                stage = parts[0].strip()
+                                details_part = parts[1].strip()
+                                
+                                # Split by commas but handle the pickup part carefully
+                                detail_parts = details_part.split(", ")
+                                
+                                pickup_part = detail_parts[0]  # "Pickup=220A (0.55*In)"
+                                tms_part = detail_parts[1] if len(detail_parts) > 1 else "TMS=0"
+                                time_part = detail_parts[2] if len(detail_parts) > 2 else "Time=0.0s"
+                                
+                                # Extract pickup value and ratio
+                                if "(" in pickup_part and ")" in pickup_part:
+                                    pickup_val = pickup_part.split("=")[1].split("(")[0].strip().replace("A", "")
+                                    ratio = pickup_part.split("(")[1].split(")")[0].replace("*In", "")
+                                else:
+                                    pickup_val = pickup_part.split("=")[1].replace("A", "").strip()
+                                    ratio = ""
+                                
+                                # Extract TMS
+                                tms = tms_part.split("=")[1].strip()
+                                
+                                # Extract Time
+                                op_time = time_part.split("=")[1].strip()
+                                
+                                writer.writerow([curr, fault_type, stage, pickup_val, ratio, tms, op_time])
+                        except Exception as e:
+                            st.warning(f"Error parsing line: {line[:50]}... - {e}")
+                            continue
+            
+            parse_and_write(st.session_state.oc_report, "Overcurrent")
+            parse_and_write(st.session_state.ef_report, "Earth Fault")
+            
+            # Create download button
+            csv_data = csv_buffer.getvalue()
+            b64 = base64.b64encode(csv_data.encode()).decode()
+            href = f'<a href="data:file/csv;base64,{b64}" download="protection_coordination.csv" style="display: inline-block; padding: 10px 20px; background-color: #0056b3; color: white; text-decoration: none; border-radius: 5px; margin-top: 10px;">📥 Download CSV</a>'
+            st.markdown(href, unsafe_allow_html=True)
+            st.success("✅ CSV file ready for download!")
+        except Exception as e:
+            st.error(f"Error creating CSV: {e}")
+    else:
+        st.warning("Please run calculation first before saving CSV.")
 
 if 'save_pdf' in st.session_state and st.session_state.save_pdf:
     st.session_state.save_pdf = False
-    if st.session_state.oc_report and st.session_state.ef_report and FPDF:
-        # Create PDF in memory
-        pdf = FPDF()
-        pdf.add_page()
-        pdf.set_font("Courier", size=8)
-        
-        full_text = st.session_state.oc_report + "\n\n" + st.session_state.ef_report
-        for line in full_text.split('\n'):
-            pdf.cell(200, 4, txt=line[:95], ln=True)
-        
-        pdf_buffer = io.BytesIO()
-        pdf.output(pdf_buffer)
-        pdf_buffer.seek(0)
-        
-        # Create download button
-        b64 = base64.b64encode(pdf_buffer.read()).decode()
-        href = f'<a href="data:application/pdf;base64,{b64}" download="protection_coordination.pdf">Click here to download PDF</a>'
-        st.markdown(href, unsafe_allow_html=True)
-        st.success("PDF file ready for download!")
-    elif not FPDF:
-        st.error("FPDF library not available")
+    if st.session_state.oc_report and st.session_state.ef_report:
+        try:
+            if FPDF:
+                # Create PDF
+                pdf = FPDF()
+                pdf.add_page()
+                pdf.set_font("Courier", size=8)
+                
+                # Add title
+                pdf.set_font("Courier", 'B', 10)
+                pdf.cell(200, 10, txt="NEA Protection Coordination Report", ln=True, align='C')
+                pdf.ln(5)
+                
+                # Add content
+                pdf.set_font("Courier", size=8)
+                full_text = st.session_state.oc_report + "\n\n" + "="*80 + "\n\n" + st.session_state.ef_report
+                
+                # Split into lines and write
+                for line in full_text.split('\n'):
+                    # Handle long lines
+                    if len(line) > 95:
+                        # Split long lines
+                        while len(line) > 95:
+                            pdf.cell(200, 4, txt=line[:95], ln=True)
+                            line = line[95:]
+                        if line:
+                            pdf.cell(200, 4, txt=line, ln=True)
+                    else:
+                        pdf.cell(200, 4, txt=line, ln=True)
+                
+                # Save to bytes
+                pdf_buffer = io.BytesIO()
+                pdf_data = pdf.output(dest='S').encode('latin1')
+                pdf_buffer.write(pdf_data)
+                pdf_buffer.seek(0)
+                
+                # Create download button
+                b64 = base64.b64encode(pdf_buffer.read()).decode()
+                href = f'<a href="data:application/pdf;base64,{b64}" download="protection_coordination.pdf" style="display: inline-block; padding: 10px 20px; background-color: #0056b3; color: white; text-decoration: none; border-radius: 5px; margin-top: 10px;">📥 Download PDF</a>'
+                st.markdown(href, unsafe_allow_html=True)
+                st.success("✅ PDF file ready for download!")
+            else:
+                st.error("FPDF library not available. Please install it using: pip install fpdf")
+        except Exception as e:
+            st.error(f"Error creating PDF: {e}")
+    else:
+        st.warning("Please run calculation first before saving PDF.")
 
 # Footer
 st.markdown("---")
 st.markdown('<p class="footer">By Protection and Automation Division, GOD</p>', unsafe_allow_html=True)
+
+# Debug information (optional - remove in production)
+if st.checkbox("Show Debug Info", False):
+    st.write("Session State:", st.session_state)
