@@ -27,7 +27,6 @@ if 'ef_report' not in st.session_state:
     st.session_state.ef_report = ""
 
 # --- Navigation Menu ---
-# We removed the 'key' and 'on_change' to prevent the Traceback error from the image
 selected_menu = option_menu(
     menu_title=None, 
     options=["Home", "Preload Default Data", "Save Tabulated CSV", "Save PDF", "Reset"],
@@ -41,10 +40,9 @@ selected_menu = option_menu(
 if selected_menu == "Preload Default Data":
     st.session_state.sys_vars = {"mva": 16.6, "hv": 33.0, "lv": 11.0, "z": 10.0, "cti": 150.0, "q4": 900.0, "q5": 300.0}
     st.session_state.feeder_data = [{"l": 200.0, "c": 400.0}, {"l": 250.0, "c": 400.0}, {"l": 300.0, "c": 400.0}]
-    # Clearing specific widget keys ensures the text boxes reset immediately
-    for i in range(20): # Covers up to 20 feeders
-        if f"l{i}" in st.session_state: st.session_state[f"l{i}"] = st.session_state.feeder_data[i]["l"]
-        if f"c{i}" in st.session_state: st.session_state[f"c{i}"] = st.session_state.feeder_data[i]["c"]
+    # Clear widget keys to force refresh
+    for key in ["mva_k", "hv_k", "lv_k", "z_k", "cti_k", "q4_k", "q5_k"]:
+        if key in st.session_state: del st.session_state[key]
     st.rerun()
 
 if selected_menu == "Reset":
@@ -52,9 +50,9 @@ if selected_menu == "Reset":
     st.session_state.feeder_data = []
     st.session_state.oc_report = ""
     st.session_state.ef_report = ""
-    # Remove all widget keys so they don't hold "old" user-typed values
+    # Clear all widget keys to force refresh
     for key in list(st.session_state.keys()):
-        if key.startswith("l") or key.startswith("c") or key in ["mva_in", "hv_in", "lv_in", "z_in", "cti_in", "q4_in", "q5_in"]:
+        if key.endswith("_k") or key.startswith("l") or key.startswith("c"):
             del st.session_state[key]
     st.rerun()
 
@@ -65,16 +63,18 @@ st.title("Nepal Electricity Authority (NEA) Grid Protection Coordination Tool")
 st.subheader("Transformer & System Data (Inputs)")
 c1, c2, c3, c4 = st.columns(4)
 with c1:
-    mva = st.number_input("MVA", value=float(st.session_state.sys_vars["mva"]), key="mva_in")
-    hv = st.number_input("HV (kV)", value=float(st.session_state.sys_vars["hv"]), key="hv_in")
+    # Added 'key' to each input to allow manual clearing during Reset
+    mva = st.number_input("MVA", value=float(st.session_state.sys_vars["mva"]), key="mva_k")
+    hv = st.number_input("HV (kV)", value=float(st.session_state.sys_vars["hv"]), key="hv_k")
 with c2:
-    lv = st.number_input("LV (kV)", value=float(st.session_state.sys_vars["lv"]), key="lv_in")
-    z = st.number_input("Z%", value=float(st.session_state.sys_vars["z"]), key="z_in")
+    lv = st.number_input("LV (kV)", value=float(st.session_state.sys_vars["lv"]), key="lv_k")
+    z = st.number_input("Z%", value=float(st.session_state.sys_vars["z"]), key="z_k")
 with c3:
-    cti = st.number_input("CTI (ms)", value=float(st.session_state.sys_vars["cti"]), key="cti_in")
-    q4_ct = st.number_input("Q4 CT Ratio", value=float(st.session_state.sys_vars["q4"]), key="q4_in")
+    cti = st.number_input("CTI (ms)", value=float(st.session_state.sys_vars["cti"]), key="cti_k")
+    q4_ct = st.number_input("Q4 CT Ratio", value=float(st.session_state.sys_vars["q4"]), key="q4_k")
+
 with c4:
-    q5_ct = st.number_input("Q5 CT Ratio", value=float(st.session_state.sys_vars["q5"]), key="q5_in")
+    q5_ct = st.number_input("Q5 CT Ratio", value=float(st.session_state.sys_vars["q5"]), key="q5_k")
 
 # --- Inputs: Feeder Configuration ---
 st.subheader("Feeder Configuration")
@@ -90,9 +90,9 @@ total_load = 0.0
 for i in range(int(num_feeders)):
     f1, f2 = st.columns(2)
     with f1:
-        l_val = st.number_input(f"Q{i+1} Load (A):", value=float(st.session_state.feeder_data[i]["l"]), key=f"l{i}")
+        l_val = st.number_input(f"Q{i+1} Load (A):", value=st.session_state.feeder_data[i]["l"], key=f"l{i}")
     with f2:
-        c_val = st.number_input(f"Q{i+1} CT Ratio:", value=float(st.session_state.feeder_data[i]["c"]), key=f"c{i}")
+        c_val = st.number_input(f"Q{i+1} CT Ratio:", value=st.session_state.feeder_data[i]["c"], key=f"c{i}")
     
     if c_val < l_val and c_val > 0:
         st.warning(f"Feeder Q{i+1} CT ({c_val}A) is less than Load ({l_val}A)")
@@ -135,7 +135,7 @@ if st.button("RUN CALCULATION", type="primary"):
             if_lv = round(isc_lv * 0.9, 2)
             if_hv = round(if_lv / (hv / lv), 2)
 
-            f_oc, f_ef = "", ""
+            f_oc, f_ef = "" , ""
             max_t_oc, max_t_ef = 0.0, 0.0
 
             # Feeder Level Calculations
