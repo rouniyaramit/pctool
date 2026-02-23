@@ -1,6 +1,6 @@
 streamlit
+pandas
 numpy
 matplotlib
-pandas
-fpdf
+fpdf2
 streamlit-option-menu
