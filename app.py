@@ -1,13 +1,11 @@
-# app.py - corrected Streamlit port of ef.py (NEAProtectionCoordinationTool)
-# Keeps calculation logic, report text format, CSV and PDF export behavior.
-
+# app.py - Streamlit port of ef.py (fixed Preload/Reset/Save flows)
 import streamlit as st
 import math
 import csv
 import io
 from PIL import Image
 
-# FPDF optional (same dependency as ef.py)
+# Optional: fpdf for PDF export (same dependency as ef.py)
 try:
     from fpdf import FPDF
     HAS_FPDF = True
@@ -16,14 +14,11 @@ except Exception:
 
 st.set_page_config(page_title="NEA Protection Coordination Tool", layout="wide")
 
-# --- Calculation logic copied from ef.py, with identical formulas and text output ---
-
+# --- Calculation logic (identical to ef.py) ---
 def compute_reports(sys_vars, feeder_rows):
     try:
-        # Parse & basic checks (identical behaviour)
         cti_ms = float(sys_vars.get('cti', '') or 0)
         if cti_ms < 120:
-            # Mirror ef.py: show CTI warning (we return a sentinel)
             return None, None, ["CTI_ERROR"], None, None, None
 
         mva = float(sys_vars.get('mva', '') or 0)
@@ -48,7 +43,6 @@ def compute_reports(sys_vars, feeder_rows):
         ct_alerts = []
 
         for i, fr in enumerate(feeder_rows):
-            # Accept empty strings as zero (consistent with original ui entry behavior which would error if non-numeric)
             try:
                 l = float(fr.get('l', '') or 0)
             except:
@@ -170,7 +164,7 @@ def generate_pdf_bytes(oc_text, ef_text):
         pdf.cell(200, 7, txt=l, ln=True)
     return pdf.output(dest='S').encode('latin-1')
 
-# --- Streamlit UI & state setup ---
+# --- App state & UI ---
 
 # Initialize session state
 if 'sys_vars' not in st.session_state:
@@ -184,9 +178,9 @@ if 'oc_text' not in st.session_state:
 if 'ef_text' not in st.session_state:
     st.session_state['ef_text'] = ""
 
-# Sidebar buttons (replacing File menu). They set flags we act on.
+# Sidebar: use explicit buttons that set flags or perform actions safely
 st.sidebar.header("File")
-if st.sidebar.button("Preload Default Data"):
+if st.sidebar.button("Preload Default Data (Set)"):
     st.session_state['sys_vars'] = {"mva":"16.6", "hv":"33", "lv":"11", "z":"10", "cti":"150", "q4":"900", "q5":"300"}
     st.session_state['num_feeders'] = 3
     st.session_state['feeders'] = [{'l': '200', 'ct': '400'},{'l': '250', 'ct': '400'},{'l': '300', 'ct': '400'}]
@@ -194,7 +188,7 @@ if st.sidebar.button("Preload Default Data"):
     st.session_state['ef_text'] = ""
     st.experimental_rerun()
 
-if st.sidebar.button("Reset"):
+if st.sidebar.button("Reset (Clear)"):
     st.session_state['sys_vars'] = {'mva': '', 'hv': '', 'lv': '', 'z': '', 'cti': '', 'q4': '', 'q5': ''}
     st.session_state['num_feeders'] = 0
     st.session_state['feeders'] = []
@@ -202,24 +196,23 @@ if st.sidebar.button("Reset"):
     st.session_state['ef_text'] = ""
     st.experimental_rerun()
 
-if st.sidebar.button("Save Tabulated CSV"):
-    # create CSV and offer download
-    csv_data = generate_tabulated_csv(st.session_state['oc_text'], st.session_state['ef_text'])
-    st.sidebar.download_button("Download CSV", data=csv_data, file_name="tabulated_report.csv", mime="text/csv")
+# For downloads, generate data and expose download buttons (no immediate action from sidebar buttons)
+st.sidebar.markdown("### Save / Export")
+csv_data_for_download = generate_tabulated_csv(st.session_state.get('oc_text', ""), st.session_state.get('ef_text', ""))
+st.sidebar.download_button("Download Tabulated CSV", data=csv_data_for_download, file_name="tabulated_report.csv", mime="text/csv")
 
-if st.sidebar.button("Save PDF"):
-    if not HAS_FPDF:
-        st.sidebar.error("FPDF not installed on server. Add fpdf to requirements.")
-    else:
-        pdfb = generate_pdf_bytes(st.session_state['oc_text'], st.session_state['ef_text'])
-        if pdfb:
-            st.sidebar.download_button("Download PDF", data=pdfb, file_name="nea_report.pdf", mime="application/pdf")
+if HAS_FPDF:
+    pdf_bytes_for_download = generate_pdf_bytes(st.session_state.get('oc_text', ""), st.session_state.get('ef_text', ""))
+    if pdf_bytes_for_download:
+        st.sidebar.download_button("Download PDF", data=pdf_bytes_for_download, file_name="nea_report.pdf", mime="application/pdf")
+else:
+    st.sidebar.info("PDF export requires 'fpdf' in requirements.txt")
 
-if st.sidebar.button("Exit"):
+if st.sidebar.button("Exit (Clear Session)"):
     st.session_state.clear()
     st.experimental_rerun()
 
-# Main layout: logo + title
+# Main header & logo
 col_logo, col_title = st.columns([1,6])
 with col_logo:
     try:
@@ -231,7 +224,7 @@ with col_title:
     st.title("Nepal Electricity Authority (NEA) Grid Protection Coordination Tool")
     st.markdown("By Protection and Automation Division, GOD")
 
-# Inputs form (preserves field names and RUN CALCULATION button)
+# Inputs form
 with st.form("inputs"):
     st.subheader("Transformer & System Data (Inputs)")
     cols = st.columns(7)
@@ -245,7 +238,7 @@ with st.form("inputs"):
     numf = st.number_input("No. of Feeders:", min_value=0, value=st.session_state['num_feeders'], step=1)
     st.session_state['num_feeders'] = int(numf)
 
-    # Resize feeders list to match num_feeders
+    # Resize feeders
     if len(st.session_state['feeders']) < st.session_state['num_feeders']:
         for _ in range(st.session_state['num_feeders'] - len(st.session_state['feeders'])):
             st.session_state['feeders'].append({'l':'0','ct':'0'})
@@ -270,7 +263,6 @@ with st.form("inputs"):
         if oc_text is None and ct_alerts and ct_alerts[0] == "CTI_ERROR":
             st.warning("CTI must be greater than or equal to 120ms.")
         elif oc_text is None:
-            # Mirror original: show invalid inputs error
             st.error("Invalid Inputs: please check values.")
         else:
             st.session_state['oc_text'] = oc_text
@@ -284,7 +276,7 @@ except:
     total_load_val = 0.0
 st.markdown(f"**Total Connected Load:** {round(total_load_val,2)} A")
 
-# Reports in tabs
+# Reports tabs
 tab1, tab2 = st.tabs(["Overcurrent (Phase)", "Earth Fault (Neutral)"])
 with tab1:
     st.subheader("Overcurrent (Phase)")
@@ -295,17 +287,6 @@ with tab2:
     st.subheader("Earth Fault (Neutral)")
     st.text_area("Report", value=st.session_state.get('ef_text', ""), height=300)
     st.download_button("Download Earth Fault Report (TXT)", data=st.session_state.get('ef_text', ""), file_name="earthfault_report.txt")
-
-# Always-available download buttons for CSV and PDF (behave like menu Save)
-csv_data_ui = generate_tabulated_csv(st.session_state.get('oc_text', ""), st.session_state.get('ef_text', ""))
-st.download_button("Download Tabulated CSV", data=csv_data_ui, file_name="tabulated_report.csv", mime="text/csv")
-
-if HAS_FPDF:
-    pdf_bytes_ui = generate_pdf_bytes(st.session_state.get('oc_text', ""), st.session_state.get('ef_text', ""))
-    if pdf_bytes_ui:
-        st.download_button("Download Report PDF", data=pdf_bytes_ui, file_name="nea_report.pdf", mime="application/pdf")
-else:
-    st.info("PDF export requires fpdf in requirements.txt")
 
 st.markdown("---")
 st.markdown("By Protection and Automation Division, GOD")
