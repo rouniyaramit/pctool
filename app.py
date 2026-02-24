@@ -1,648 +1,351 @@
+# app.py
+# Streamlit port of ef.py (NEAProtectionCoordinationTool)
+# Keeps the exact calculation logic, report text format, CSV columns and PDF export.
+
 import streamlit as st
-import pandas as pd
 import math
 import csv
 import io
-from fpdf import FPDF
+from datetime import datetime
+from PIL import Image
 import base64
-import tempfile
-import os
 
-# Page configuration
-st.set_page_config(
-    page_title="NEA Protection Coordination Tool",
-    page_icon="⚡",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+# Optional: fpdf for PDF export (same as ef.py)
+try:
+    from fpdf import FPDF
+    HAS_FPDF = True
+except Exception:
+    HAS_FPDF = False
 
-# Custom CSS for better UI
-st.markdown("""
-<style>
-    .main-header {
-        font-size: 24px;
-        font-weight: bold;
-        color: #0056b3;
-        margin-bottom: 20px;
-    }
-    .sub-header {
-        font-size: 18px;
-        font-weight: bold;
-        color: #333;
-        margin-top: 10px;
-        margin-bottom: 10px;
-    }
-    .total-load {
-        font-size: 16px;
-        font-weight: bold;
-        color: #d9534f;
-        padding: 10px;
-        border-radius: 5px;
-        background-color: #f8f9fa;
-        text-align: center;
-    }
-    .alert-red {
-        color: #ff0000;
-        font-weight: bold;
-        background-color: #ffe6e6;
-        padding: 10px;
-        border-radius: 5px;
-        margin: 5px 0;
-    }
-    .ct-alert {
-        background-color: #ffcccc;
-        padding: 5px;
-        border-radius: 3px;
-    }
-    .footer {
-        text-align: center;
-        color: #555;
-        font-style: italic;
-        font-size: 12px;
-        margin-top: 30px;
-        padding: 10px;
-    }
-    .report-box {
-        background-color: #f9f9f9;
-        padding: 15px;
-        border-radius: 5px;
-        font-family: 'Courier New', monospace;
-        font-size: 12px;
-        border: 1px solid #ddd;
-        margin-top: 10px;
-        white-space: pre-wrap;
-        max-height: 600px;
-        overflow-y: auto;
-    }
-    .stButton > button {
-        background-color: #0056b3;
-        color: white;
-        font-weight: bold;
-        width: 100%;
-    }
-    .stButton > button:hover {
-        background-color: #004494;
-    }
-    div[data-testid="stNumberInput"] label {
-        font-size: 12px;
-        font-weight: normal;
-    }
-    .download-btn {
-        display: inline-block;
-        padding: 10px 20px;
-        background-color: #0056b3;
-        color: white;
-        text-decoration: none;
-        border-radius: 5px;
-        margin-top: 10px;
-        text-align: center;
-    }
-    .download-btn:hover {
-        background-color: #004494;
-    }
-</style>
-""", unsafe_allow_html=True)
+st.set_page_config(page_title="NEA Protection Coordination Tool", layout="wide")
 
-# Initialize session state
-if 'feeder_rows' not in st.session_state:
-    st.session_state.feeder_rows = []
-if 'oc_report' not in st.session_state:
-    st.session_state.oc_report = ""
-if 'ef_report' not in st.session_state:
-    st.session_state.ef_report = ""
-if 'total_load' not in st.session_state:
-    st.session_state.total_load = 0.0
-if 'calculation_done' not in st.session_state:
-    st.session_state.calculation_done = False
-if 'show_csv_download' not in st.session_state:
-    st.session_state.show_csv_download = False
-if 'show_pdf_download' not in st.session_state:
-    st.session_state.show_pdf_download = False
-if 'csv_data' not in st.session_state:
-    st.session_state.csv_data = None
-if 'pdf_data' not in st.session_state:
-    st.session_state.pdf_data = None
+# --- Helper functions that mirror ef.py logic exactly ---
 
-# Header with logo
-col1, col2 = st.columns([3, 1])
-with col1:
-    st.markdown('<p class="main-header">Nepal Electricity Authority (NEA) Grid Protection Coordination Tool</p>', unsafe_allow_html=True)
-with col2:
-    # Try to display logo if exists
+def validate_numeric_str(s):
+    if s is None or s == "":
+        return True
     try:
-        st.image("logo.png", width=100)
+        float(s)
+        return True
     except:
-        st.markdown("**NEA**")
+        return False
 
-# Sidebar for File menu equivalent
-with st.sidebar:
-    st.markdown('<p class="sub-header">File Menu</p>', unsafe_allow_html=True)
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("📂 Preload Data", use_container_width=True):
-            st.session_state.preload_data = True
-        if st.button("📊 Save CSV", use_container_width=True):
-            st.session_state.save_csv = True
-    with col2:
-        if st.button("📄 Save PDF", use_container_width=True):
-            st.session_state.save_pdf = True
-        if st.button("🔄 Reset", use_container_width=True):
-            st.session_state.reset_data = True
-    
-    st.markdown("---")
-    if st.session_state.calculation_done:
-        st.success("✅ Calculation completed")
-    
-    st.markdown('<p class="footer">By Protection and Automation Division, GOD</p>', unsafe_allow_html=True)
-
-# Transformer & System Data Section
-st.markdown('<p class="sub-header">Transformer & System Data (Inputs)</p>', unsafe_allow_html=True)
-
-# Create columns for input parameters
-col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
-
-with col1:
-    mva = st.number_input("MVA", min_value=0.0, value=16.6, step=0.1, format="%.2f", key="mva")
-with col2:
-    hv = st.number_input("HV (kV)", min_value=0.0, value=33.0, step=1.0, format="%.2f", key="hv")
-with col3:
-    lv = st.number_input("LV (kV)", min_value=0.0, value=11.0, step=1.0, format="%.2f", key="lv")
-with col4:
-    z = st.number_input("Z%", min_value=0.0, value=10.0, step=0.1, format="%.2f", key="z")
-with col5:
-    cti = st.number_input("CTI (ms)", min_value=120.0, value=150.0, step=10.0, format="%.0f", key="cti")
-with col6:
-    q4_ct = st.number_input("Q4 CT", min_value=0.0, value=900.0, step=50.0, format="%.0f", key="q4_ct")
-with col7:
-    q5_ct = st.number_input("Q5 CT", min_value=0.0, value=300.0, step=50.0, format="%.0f", key="q5_ct")
-
-# Feeder Configuration Section
-st.markdown('<p class="sub-header">Feeder Configuration</p>', unsafe_allow_html=True)
-
-# Number of feeders control
-col1, col2 = st.columns([1, 5])
-with col1:
-    num_feeders = st.number_input("No. of Feeders:", min_value=0, max_value=20, value=3, step=1, key="num_feeders")
-with col2:
-    st.markdown("<br>", unsafe_allow_html=True)
-    if st.button("Update Rows", key="update_rows"):
-        st.rerun()
-
-# Create feeder input rows
-feeder_data = []
-total_load = 0.0
-
-# Default load values for preload
-default_loads = [200, 250, 300]
-default_cts = [400, 400, 400]
-
-for i in range(num_feeders):
-    cols = st.columns([1, 2, 1, 2, 4])
-    with cols[0]:
-        st.markdown(f"**Q{i+1}**")
-    with cols[1]:
-        default_load = default_loads[i] if i < len(default_loads) else 200
-        load = st.number_input(f"Load (A)", min_value=0.0, value=float(default_load), 
-                               step=10.0, key=f"load_{i}", format="%.2f", label_visibility="collapsed")
-        total_load += load
-    with cols[2]:
-        st.markdown("**CT:**")
-    with cols[3]:
-        default_ct = default_cts[i] if i < len(default_cts) else 400
-        ct = st.number_input(f"CT Ratio", min_value=0.0, value=float(default_ct), 
-                            step=50.0, key=f"ct_{i}", format="%.0f", label_visibility="collapsed")
-    with cols[4]:
-        # CT alert check
-        if ct < load:
-            st.markdown(f'<p style="color:red; font-weight:bold;">⚠ CT &lt; Load</p>', unsafe_allow_html=True)
-        else:
-            st.markdown("✓")
-    
-    feeder_data.append({'load': load, 'ct': ct, 'index': i})
-
-# Update session state total load
-st.session_state.total_load = total_load
-
-# Display total connected load
-st.markdown(f'<p class="total-load">Total Connected Load: {total_load:.2f} A</p>', unsafe_allow_html=True)
-
-# Run Calculation Button
-if st.button("RUN CALCULATION", key="calculate", use_container_width=True):
+def compute_reports(sys_vars, feeder_rows):
+    """
+    sys_vars: dict with keys mva,hv,lv,z,cti,q4,q5 (strings convertible to float)
+    feeder_rows: list of dicts {'l': str, 'ct': str}
+    Returns oc_text, ef_text, ct_alerts_list, flc_lv, flc_hv, isc_lv
+    """
+    # replicate ef.py behaviour and text formatting exactly
     try:
-        # Validate CTI
-        if cti < 120:
-            st.error("CTI must be greater than or equal to 120ms.")
-        else:
-            # Calculations
-            cti_s = cti / 1000
-            
-            # Calculate transformer values
-            flc_lv = round((mva * 1000) / (math.sqrt(3) * lv), 2)
-            flc_hv = round((mva * 1000) / (math.sqrt(3) * hv), 2)
-            isc_lv = round(flc_lv / (z / 100), 2)
-            if_lv = round(isc_lv * 0.9, 2)
-            if_hv = round(if_lv / (hv / lv), 2)
-            
-            # Initialize reports
-            oc_report_lines = []
-            ef_report_lines = []
-            ct_alerts = []
-            max_t_oc, max_t_ef = 0.0, 0.0
-            
-            st.write("Debug: Processing feeders...")  # Debug
-            
-            # Process each feeder
-            for i, fd in enumerate(feeder_data):
-                l, ct_val = fd['load'], fd['ct']
-                
-                # CT alert
-                if ct_val < l:
-                    ct_alerts.append(f"ALERT: Feeder Q{i+1} CT ({ct_val}A) is less than Load ({l}A)")
-                
-                # Overcurrent calculations
-                p_oc = round(1.1 * l, 2)
-                r1 = round(p_oc/ct_val, 2) if ct_val > 0 else 0
-                # Calculate IDMT time using standard inverse curve
-                try:
-                    t_oc = round(0.025 * (0.14 / (math.pow(max(1.05, if_lv/p_oc), 0.02) - 1)), 3)
-                except:
-                    t_oc = 0
-                max_t_oc = max(max_t_oc, t_oc)
-                p2 = round(3*l, 2)
-                r2 = round(p2/ct_val, 2) if ct_val > 0 else 0
-                
-                oc_report_lines.append(f"FEEDER Q{i+1}: Load={l}A, CT={ct_val}")
-                oc_report_lines.append(f" - S1 (IDMT): Pickup={p_oc}A ({r1}*In), TMS=0.025, Time={t_oc}s")
-                oc_report_lines.append(f" - S2 (DT):   Pickup={p2}A ({r2}*In), Time=0.0s")
-                oc_report_lines.append("")
-                
-                # Earth fault calculations
-                p_ef = round(0.15 * l, 2)
-                r_ef1 = round(p_ef/ct_val, 2) if ct_val > 0 else 0
-                try:
-                    t_ef = round(0.025 * (0.14 / (math.pow(max(1.05, if_lv/p_ef), 0.02) - 1)), 3)
-                except:
-                    t_ef = 0
-                max_t_ef = max(max_t_ef, t_ef)
-                p_ef2 = round(1.0*l, 2)
-                r_ef2 = round(p_ef2/ct_val, 2) if ct_val > 0 else 0
-                
-                ef_report_lines.append(f"FEEDER Q{i+1}: Load={l}A, CT={ct_val}")
-                ef_report_lines.append(f" - S1 (IDMT): Pickup={p_ef}A ({r_ef1}*In), TMS=0.025, Time={t_ef}s")
-                ef_report_lines.append(f" - S2 (DT):   Pickup={p_ef2}A ({r_ef2}*In), Time=0.0s")
-                ef_report_lines.append("")
-            
-            st.write("Debug: Processing Q4 and Q5...")  # Debug
-            
-            # HV Load calculation
-            hv_load = total_load / (hv / lv) if hv > 0 and lv > 0 else 0
-            
-            # Q5 CT alert
-            if q5_ct < hv_load:
-                ct_alerts.append(f"ALERT: Q5 HV CT ({q5_ct}A) is less than HV Load ({round(hv_load,2)}A)")
-            
-            # Q4 CT alert
-            if q4_ct < total_load:
-                ct_alerts.append(f"ALERT: Q4 LV CT ({q4_ct}A) is less than LV Load ({round(total_load,2)}A)")
-            
-            # Coordination data for Q4 and Q5
-            # INCOMER Q4 (LV Side)
-            l_cur_q4 = total_load  # Load on LV side
-            t_req_oc_q4 = round(max_t_oc + cti_s, 3)
-            t_req_ef_q4 = round(max_t_ef + cti_s, 3)
-            
-            # Overcurrent for Q4
-            p_oc_q4 = round(1.1 * l_cur_q4, 2)
-            r1_q4 = round(p_oc_q4/q4_ct, 2) if q4_ct > 0 else 0
-            try:
-                denominator_oc_q4 = max(1.05, if_lv/p_oc_q4)
-                tms_oc_q4 = round(t_req_oc_q4 / (0.14 / (math.pow(denominator_oc_q4, 0.02) - 1)), 3)
-            except:
-                tms_oc_q4 = 0
-            
-            p2_q4 = round(3 * l_cur_q4, 2)
-            r2_q4 = round(p2_q4/q4_ct, 2) if q4_ct > 0 else 0
-            s3_q4 = round(0.9 * isc_lv, 2)
-            r3_q4 = round(s3_q4/q4_ct, 2) if q4_ct > 0 else 0
-            
-            oc_report_lines.append(f"INCOMER Q4 (LV Side): Load={round(l_cur_q4,2)}A, CT={q4_ct}")
-            oc_report_lines.append(f" - S1 (IDMT): Pickup={p_oc_q4}A ({r1_q4}*In), TMS={tms_oc_q4}, Time={t_req_oc_q4}s")
-            oc_report_lines.append(f" - S2 (DT):   Pickup={p2_q4}A ({r2_q4}*In), Time={cti/1000}s")
-            oc_report_lines.append(f" - S3 (DT):   Pickup={s3_q4}A ({r3_q4}*In), Time=0.0s")
-            oc_report_lines.append("")
-            
-            # Earth Fault for Q4
-            p_ef_q4 = round(0.15 * l_cur_q4, 2)
-            r_ef1_q4 = round(p_ef_q4/q4_ct, 2) if q4_ct > 0 else 0
-            try:
-                denominator_ef_q4 = max(1.05, if_lv/p_ef_q4)
-                tms_ef_q4 = round(t_req_ef_q4 / (0.14 / (math.pow(denominator_ef_q4, 0.02) - 1)), 3)
-            except:
-                tms_ef_q4 = 0
-            
-            p_ef2_q4 = round(1.0 * l_cur_q4, 2)
-            r_ef2_q4 = round(p_ef2_q4/q4_ct, 2) if q4_ct > 0 else 0
-            r_ef3_q4 = round(s3_q4/q4_ct, 2) if q4_ct > 0 else 0
-            
-            ef_report_lines.append(f"INCOMER Q4 (LV Side): Load={round(l_cur_q4,2)}A, CT={q4_ct}")
-            ef_report_lines.append(f" - S1 (IDMT): Pickup={p_ef_q4}A ({r_ef1_q4}*In), TMS={tms_ef_q4}, Time={t_req_ef_q4}s")
-            ef_report_lines.append(f" - S2 (DT):   Pickup={p_ef2_q4}A ({r_ef2_q4}*In), Time={cti/1000}s")
-            ef_report_lines.append(f" - S3 (DT):   Pickup={s3_q4}A ({r_ef3_q4}*In), Time=0.0s")
-            ef_report_lines.append("")
-            
-            # HV SIDE Q5 (HV Side)
-            l_cur_q5 = total_load / (hv / lv) if hv > 0 and lv > 0 else 0
-            t_req_oc_q5 = round(max_t_oc + (2 * cti_s), 3)  # Double CTI for HV side
-            t_req_ef_q5 = round(max_t_ef + (2 * cti_s), 3)
-            
-            # Overcurrent for Q5
-            p_oc_q5 = round(1.1 * l_cur_q5, 2)
-            r1_q5 = round(p_oc_q5/q5_ct, 2) if q5_ct > 0 else 0
-            try:
-                denominator_oc_q5 = max(1.05, if_hv/p_oc_q5)
-                tms_oc_q5 = round(t_req_oc_q5 / (0.14 / (math.pow(denominator_oc_q5, 0.02) - 1)), 3)
-            except:
-                tms_oc_q5 = 0
-            
-            p2_q5 = round(3 * l_cur_q5, 2)
-            r2_q5 = round(p2_q5/q5_ct, 2) if q5_ct > 0 else 0
-            s3_q5 = round(if_hv, 2)
-            r3_q5 = round(s3_q5/q5_ct, 2) if q5_ct > 0 else 0
-            
-            oc_report_lines.append(f"HV SIDE Q5 (HV Side): Load={round(l_cur_q5,2)}A, CT={q5_ct}")
-            oc_report_lines.append(f" - S1 (IDMT): Pickup={p_oc_q5}A ({r1_q5}*In), TMS={tms_oc_q5}, Time={t_req_oc_q5}s")
-            oc_report_lines.append(f" - S2 (DT):   Pickup={p2_q5}A ({r2_q5}*In), Time={(2*cti)/1000}s")
-            oc_report_lines.append(f" - S3 (DT):   Pickup={s3_q5}A ({r3_q5}*In), Time=0.0s")
-            oc_report_lines.append("")
-            
-            # Earth Fault for Q5
-            p_ef_q5 = round(0.15 * l_cur_q5, 2)
-            r_ef1_q5 = round(p_ef_q5/q5_ct, 2) if q5_ct > 0 else 0
-            try:
-                denominator_ef_q5 = max(1.05, if_hv/p_ef_q5)
-                tms_ef_q5 = round(t_req_ef_q5 / (0.14 / (math.pow(denominator_ef_q5, 0.02) - 1)), 3)
-            except:
-                tms_ef_q5 = 0
-            
-            p_ef2_q5 = round(1.0 * l_cur_q5, 2)
-            r_ef2_q5 = round(p_ef2_q5/q5_ct, 2) if q5_ct > 0 else 0
-            r_ef3_q5 = round(s3_q5/q5_ct, 2) if q5_ct > 0 else 0
-            
-            ef_report_lines.append(f"HV SIDE Q5 (HV Side): Load={round(l_cur_q5,2)}A, CT={q5_ct}")
-            ef_report_lines.append(f" - S1 (IDMT): Pickup={p_ef_q5}A ({r_ef1_q5}*In), TMS={tms_ef_q5}, Time={t_req_ef_q5}s")
-            ef_report_lines.append(f" - S2 (DT):   Pickup={p_ef2_q5}A ({r_ef2_q5}*In), Time={(2*cti)/1000}s")
-            ef_report_lines.append(f" - S3 (DT):   Pickup={s3_q5}A ({r_ef3_q5}*In), Time=0.0s")
-            ef_report_lines.append("")
-            
-            # Header
-            header = f"FLC LV: {flc_lv}A | FLC HV: {flc_hv}A | Short Circuit LV: {isc_lv}A | If LV: {if_lv}A | If HV: {if_hv}A\n" + "="*80
-            
-            # Store reports in session state
-            full_oc_report = []
-            full_ef_report = []
-            
-            # Add alerts
-            if total_load > flc_lv:
-                alert_msg = f"CRITICAL ALERT: TRANSFORMER OVERLOAD ({total_load}A > {flc_lv}A)"
-                full_oc_report.append(alert_msg)
-                full_ef_report.append(alert_msg)
-                full_oc_report.append("")
-                full_ef_report.append("")
-            
-            if ct_alerts:
-                for alert in ct_alerts:
-                    full_oc_report.append(alert)
-                    full_ef_report.append(alert)
-                full_oc_report.append("")
-                full_ef_report.append("")
-            
-            full_oc_report.append(header)
-            full_ef_report.append(header)
-            full_oc_report.append("")
-            full_ef_report.append("")
-            
-            full_oc_report.extend(oc_report_lines)
-            full_ef_report.extend(ef_report_lines)
-            
-            st.session_state.oc_report = "\n".join(full_oc_report)
-            st.session_state.ef_report = "\n".join(full_ef_report)
-            st.session_state.calculation_done = True
-            
-            # Clear download flags
-            st.session_state.show_csv_download = False
-            st.session_state.show_pdf_download = False
-            
-            st.success("✅ Calculation completed successfully!")
-            st.rerun()
+        cti_ms = float(sys_vars['cti'])
+        if cti_ms < 120:
+            return None, None, ["CTI_ERROR"], None, None, None
+        mva = float(sys_vars['mva'])
+        hv_v = float(sys_vars['hv'])
+        lv_v = float(sys_vars['lv'])
+        z_pct = float(sys_vars['z'])
+        q4_ct = float(sys_vars['q4'])
+        q5_ct = float(sys_vars['q5'])
+        cti_s = cti_ms / 1000.0
+
+        flc_lv = round((mva * 1000) / (math.sqrt(3) * lv_v), 2)
+        flc_hv = round((mva * 1000) / (math.sqrt(3) * hv_v), 2)
+        isc_lv = round(flc_lv / (z_pct / 100), 2)
+        if_lv = round(isc_lv * 0.9, 2)
+        if_hv = round(if_lv / (hv_v / lv_v), 2)
+
+        total_load = 0.0
+        max_t_oc = 0.0
+        max_t_ef = 0.0
+        f_oc_txt = ""
+        f_ef_txt = ""
+        ct_alerts = []
+
+        # feeder loop
+        for i, fr in enumerate(feeder_rows):
+            l = float(fr.get('l', 0) or 0)
+            ct = float(fr.get('ct', 0) or 0)
+            total_load += l
+            if ct < l:
+                ct_alerts.append(f"ALERT: Feeder Q{i+1} CT ({ct}A) is less than Load ({l}A)\n")
+
+            p_oc = round(1.1 * l, 2); r1 = round(p_oc/ct, 2) if ct != 0 else float('inf')
+            # t_oc formula exactly as ef.py
+            t_oc = round(0.025 * (0.14 / (math.pow(max(1.05, if_lv/p_oc), 0.02) - 1)), 3) if p_oc != 0 else 0.0
+            max_t_oc = max(max_t_oc, t_oc)
+            p2 = round(3*l, 2); r2 = round(p2/ct, 2) if ct != 0 else float('inf')
+            f_oc_txt += f"FEEDER Q{i+1}: Load={l}A, CT={ct}\n - S1 (IDMT): Pickup={p_oc}A ({r1}*In), TMS=0.025, Time={t_oc}s\n - S2 (DT):   Pickup={p2}A ({r2}*In), Time=0.0s\n\n"
+
+            p_ef = round(0.15 * l, 2); r_ef1 = round(p_ef/ct, 2) if ct != 0 else float('inf')
+            t_ef = round(0.025 * (0.14 / (math.pow(max(1.05, if_lv/p_ef), 0.02) - 1)), 3) if p_ef != 0 else 0.0
+            max_t_ef = max(max_t_ef, t_ef)
+            p_ef2 = round(1.0*l, 2); r_ef2 = round(p_ef2/ct, 2) if ct != 0 else float('inf')
+            f_ef_txt += f"FEEDER Q{i+1}: Load={l}A, CT={ct}\n - S1 (IDMT): Pickup={p_ef}A ({r_ef1}*In), TMS=0.025, Time={t_ef}s\n - S2 (DT):   Pickup={p_ef2}A ({r_ef2}*In), Time=0.0s\n\n"
+
+        hv_load = total_load / (hv_v / lv_v) if (hv_v / lv_v) != 0 else 0.0
+
+        if q5_ct < hv_load:
+            ct_alerts.append(f"ALERT: Q5 HV CT ({q5_ct}A) is less than HV Load ({round(hv_load,2)}A)\n")
+
+        coord_data = [
+            ("INCOMER Q4 (LV)", q4_ct, if_lv, 1, round(0.9*isc_lv,2), cti_ms, max_t_oc, max_t_ef),
+            ("HV SIDE Q5 (HV)", q5_ct, if_hv, hv_v/lv_v, round(if_hv,2), cti_ms*2, max_t_oc+cti_s, max_t_ef+cti_s)
+        ]
+
+        i_oc = ""
+        i_ef = ""
+        for name, ct_v, fault, scale, s3, dt_ms, t_prev_oc, t_prev_ef in coord_data:
+            l_cur = total_load / scale if scale != 0 else 0.0
+            t_req_oc = round(t_prev_oc + cti_s, 3)
+            t_req_ef = round(t_prev_ef + cti_s, 3)
+            p_oc = round(1.1 * l_cur, 2); r1 = round(p_oc/ct_v, 2) if ct_v != 0 else float('inf')
+            denom_oc = (0.14 / (math.pow(max(1.05, fault/p_oc), 0.02) - 1)) if p_oc != 0 else 1.0
+            tms_oc = round(t_req_oc / denom_oc, 3) if denom_oc != 0 else 0.0
+            p2 = round(3*l_cur, 2)
+            r2 = round(p2/ct_v, 2) if ct_v != 0 else float('inf')
+            r3 = round(s3/ct_v, 2) if ct_v != 0 else float('inf')
+            i_oc += f"{name}: Load={round(l_cur,2)}A, CT={ct_v}\n - S1 (IDMT): Pickup={p_oc}A ({r1}*In), TMS={tms_oc}, Time={t_req_oc}s\n - S2 (DT):   Pickup={p2}A ({r2}*In), Time={dt_ms/1000}s\n - S3 (DT):   Pickup={s3}A ({r3}*In), Time=0.0s\n\n"
+
+            p_ef = round(0.15 * l_cur, 2); r_ef1 = round(p_ef/ct_v, 2) if ct_v != 0 else float('inf')
+            denom_ef = (0.14 / (math.pow(max(1.05, fault/p_ef), 0.02) - 1)) if p_ef != 0 else 1.0
+            tms_ef = round(t_req_ef / denom_ef, 3) if denom_ef != 0 else 0.0
+            p_ef2 = round(1.0*l_cur, 2)
+            r_ef2 = round(p_ef2/ct_v, 2) if ct_v != 0 else float('inf')
+            r_ef3 = round(s3/ct_v, 2) if ct_v != 0 else float('inf')
+            i_ef += f"{name}: Load={round(l_cur,2)}A, CT={ct_v}\n - S1 (IDMT): Pickup={p_ef}A ({r_ef1}*In), TMS={tms_ef}, Time={t_req_ef}s\n - S2 (DT):   Pickup={p_ef2}A ({r_ef2}*In), Time={dt_ms/1000}s\n - S3 (DT):   Pickup={s3}A ({r_ef3}*In), Time=0.0s\n\n"
+
+        head = f"FLC LV: {flc_lv}A | FLC HV: {flc_hv}A | Short Circuit: {isc_lv}A\n" + "="*60 + "\n"
+
+        oc_report_text = ""
+        ef_report_text = ""
+        # build reports same way ef.py does:
+        # Insert critical alert and ct_alerts before the head, then the feeder text and i_oc / i_ef
+        oc_prefix = ""
+        ef_prefix = ""
+
+        if total_load > flc_lv:
+            oc_prefix += f"CRITICAL ALERT: TRANSFORMER OVERLOAD ({total_load}A > {flc_lv}A)\n"
+            # ef.py inserts same alert into both reports
+            ef_prefix += f"CRITICAL ALERT: TRANSFORMER OVERLOAD ({total_load}A > {flc_lv}A)\n"
+
+        for alert in ct_alerts:
+            oc_prefix += alert
+            ef_prefix += alert
+
+        oc_report_text = oc_prefix + head + (f_oc_txt + i_oc)
+        ef_report_text = ef_prefix + head + (f_ef_txt + i_ef)
+
+        return oc_report_text, ef_report_text, ct_alerts, flc_lv, flc_hv, isc_lv
 
     except Exception as e:
-        st.error(f"❌ Invalid Inputs: {e}")
-        st.exception(e)
+        return None, None, [f"ERROR:{e}"], None, None, None
 
-# Display Reports in Tabs
-if st.session_state.oc_report or st.session_state.ef_report:
-    tab1, tab2 = st.tabs(["🔴 Overcurrent (Phase)", "🟢 Earth Fault (Neutral)"])
-    
-    with tab1:
-        st.markdown(f'<div class="report-box">{st.session_state.oc_report}</div>', unsafe_allow_html=True)
-    
-    with tab2:
-        st.markdown(f'<div class="report-box">{st.session_state.ef_report}</div>', unsafe_allow_html=True)
+def generate_tabulated_csv(oc_text, ef_text):
+    """
+    Recreate the CSV produced by ef.py.save_csv()
+    Columns: ["EQUIPMENT","FAULT TYPE","STAGE","PICKUP (A)","RATIO (*In)","TMS/DELAY","TIME (s)"]
+    We'll parse the report texts the same way ef.py.parse does.
+    """
+    out = io.StringIO()
+    writer = csv.writer(out)
+    writer.writerow(["EQUIPMENT", "FAULT TYPE", "STAGE", "PICKUP (A)", "RATIO (*In)", "TMS/DELAY", "TIME (s)"])
 
-# Handle File Menu Actions
-if 'preload_data' in st.session_state and st.session_state.preload_data:
-    st.session_state.preload_data = False
-    # Data is preloaded through default values in number inputs
-    st.session_state.oc_report = ""
-    st.session_state.ef_report = ""
-    st.session_state.calculation_done = False
-    st.rerun()
+    def parse(txt, label):
+        curr = ""
+        for line in txt.split('\n'):
+            if ":" in line and "Load" in line:
+                curr = line.split(":")[0]
+            elif "- S" in line:
+                p = line.split(":")
+                stage = p[0].strip("- ")
+                details = p[1].split(",")
+                # pick_raw like " Pickup=xxxA (yy*In)"
+                pick_raw = details[0].split("=")[1].strip()
+                val = pick_raw.split("(")[0].strip()
+                rat = pick_raw.split("(")[1].replace("*In)", "").strip()
+                # tms
+                tms = details[1].split("=")[1].strip() if len(details) > 1 else ""
+                # op/time
+                op = details[2].split("=")[1].strip() if len(details) > 2 else "0.0s"
+                writer.writerow([curr, label, stage, val, rat, tms, op])
 
-if 'reset_data' in st.session_state and st.session_state.reset_data:
-    st.session_state.reset_data = False
-    st.session_state.oc_report = ""
-    st.session_state.ef_report = ""
-    st.session_state.calculation_done = False
-    st.session_state.show_csv_download = False
-    st.session_state.show_pdf_download = False
-    st.rerun()
+    parse(oc_text, "Overcurrent")
+    parse(ef_text, "Earth Fault")
+    return out.getvalue()
 
-# CSV Generation
-if 'save_csv' in st.session_state and st.session_state.save_csv:
-    st.session_state.save_csv = False
-    if st.session_state.oc_report and st.session_state.ef_report:
-        try:
-            # Create CSV in memory
-            csv_buffer = io.StringIO()
-            writer = csv.writer(csv_buffer)
-            writer.writerow(["EQUIPMENT", "FAULT TYPE", "STAGE", "PICKUP (A)", "RATIO (*In)", "TMS/DELAY", "TIME (s)"])
-            
-            def parse_and_write(txt, fault_type):
-                curr = ""
-                lines = txt.split('\n')
-                for line in lines:
-                    if ":" in line and "Load" in line:
-                        curr = line.split(":")[0].strip()
-                    elif "- S" in line:
-                        try:
-                            # Parse line like "- S1 (IDMT): Pickup=220A (0.55*In), TMS=0.025, Time=0.123s"
-                            if "Pickup=" in line:
-                                parts = line.split(":", 1)
-                                if len(parts) > 1:
-                                    stage = parts[0].strip()
-                                    details = parts[1].strip()
-                                    
-                                    # Extract pickup
-                                    if "Pickup=" in details:
-                                        pickup_part = details.split("Pickup=")[1].split(",")[0].strip()
-                                        if "(" in pickup_part and ")" in pickup_part:
-                                            pickup_val = pickup_part.split("(")[0].replace("A", "").strip()
-                                            ratio = pickup_part.split("(")[1].split(")")[0].replace("*In", "").strip()
-                                        else:
-                                            pickup_val = pickup_part.replace("A", "").strip()
-                                            ratio = ""
-                                        
-                                        # Extract TMS
-                                        if "TMS=" in details:
-                                            tms = details.split("TMS=")[1].split(",")[0].strip()
-                                        else:
-                                            tms = ""
-                                        
-                                        # Extract Time
-                                        if "Time=" in details:
-                                            op_time = details.split("Time=")[1].strip()
-                                        else:
-                                            op_time = ""
-                                        
-                                        writer.writerow([curr, fault_type, stage, pickup_val, ratio, tms, op_time])
-                        except Exception as e:
-                            continue
-            
-            parse_and_write(st.session_state.oc_report, "Overcurrent")
-            parse_and_write(st.session_state.ef_report, "Earth Fault")
-            
-            # Store CSV data in session state
-            st.session_state.csv_data = csv_buffer.getvalue()
-            st.session_state.show_csv_download = True
-            
-        except Exception as e:
-            st.error(f"Error creating CSV: {e}")
+def generate_pdf_bytes(oc_text, ef_text):
+    if not HAS_FPDF:
+        return None
+    pdf = FPDF()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.add_page()
+    pdf.set_font("Courier", size=10)
+    t = oc_text + "\n" + ef_text
+    for l in t.split('\n'):
+        # FPDF cell width may need truncation; replicate ef.py which used Courier and cell(200,7)
+        pdf.cell(200, 7, txt=l, ln=True)
+    return pdf.output(dest='S').encode('latin-1')  # return bytes
+
+# --- Sidebar / Controls (replicating the File menu) ---
+
+st.sidebar.image("logo.png" if st.file_uploader is None and True else "logo.png", use_column_width=False) if False else None
+# We will show the logo at top-left of main area instead.
+
+st.sidebar.header("File")
+if st.sidebar.button("Preload Default Data"):
+    st.session_state['preload'] = True
+if st.sidebar.button("Save Tabulated CSV"):
+    st.session_state['_save_csv'] = True
+if st.sidebar.button("Save PDF"):
+    st.session_state['_save_pdf'] = True
+if st.sidebar.button("Reset"):
+    st.session_state['reset'] = True
+# "Exit" — in web we can't close window; provide a clear-state action
+if st.sidebar.button("Exit"):
+    st.session_state.clear()
+    st.experimental_rerun()
+
+# --- Main layout: show logo and title similar to original ---
+
+col_logo, col_title = st.columns([1,4])
+with col_logo:
+    try:
+        img = Image.open("logo.png")
+        st.image(img, width=140)
+    except Exception:
+        pass
+with col_title:
+    st.title("Nepal Electricity Authority (NEA) Grid Protection Coordination Tool")
+    st.markdown("By Protection and Automation Division, GOD")
+
+# Initialize session state variables to hold inputs, preserving values across reruns
+if 'sys_vars' not in st.session_state:
+    st.session_state['sys_vars'] = {'mva': '', 'hv': '', 'lv': '', 'z': '', 'cti': '', 'q4': '', 'q5': ''}
+if 'num_feeders' not in st.session_state:
+    st.session_state['num_feeders'] = 3
+if 'feeders' not in st.session_state:
+    st.session_state['feeders'] = [{'l': '0', 'ct': '0'} for _ in range(st.session_state['num_feeders'])]
+if 'oc_text' not in st.session_state:
+    st.session_state['oc_text'] = ""
+if 'ef_text' not in st.session_state:
+    st.session_state['ef_text'] = ""
+
+# Handle Preload / Reset triggered from sidebar buttons
+if st.session_state.get('preload', False):
+    st.session_state['sys_vars'] = {"mva":"16.6", "hv":"33", "lv":"11", "z":"10", "cti":"150", "q4":"900", "q5":"300"}
+    st.session_state['num_feeders'] = 3
+    st.session_state['feeders'] = [{'l': '200', 'ct': '400'},{'l': '250', 'ct': '400'},{'l': '300', 'ct': '400'}]
+    st.session_state['preload'] = False
+
+if st.session_state.get('reset', False):
+    st.session_state['sys_vars'] = {'mva': '', 'hv': '', 'lv': '', 'z': '', 'cti': '', 'q4': '', 'q5': ''}
+    st.session_state['num_feeders'] = 0
+    st.session_state['feeders'] = []
+    st.session_state['oc_text'] = ""
+    st.session_state['ef_text'] = ""
+    st.session_state['reset'] = False
+
+# --- Inputs area (replicating top_frame) ---
+with st.form(key="inputs_form"):
+    st.subheader("Transformer & System Data (Inputs)")
+    cols = st.columns(7)
+    keys = [("MVA","mva"), ("HV (kV)","hv"), ("LV (kV)","lv"), ("Z%","z"), ("CTI (ms)","cti"), ("Q4 CT","q4"), ("Q5 CT","q5")]
+    for c, (label, key) in zip(cols, keys):
+        with c:
+            val = st.text_input(label, value=st.session_state['sys_vars'].get(key,""))
+            st.session_state['sys_vars'][key] = val
+
+    st.markdown("---")
+    st.subheader("Feeder Configuration")
+    cols_f = st.columns([1,3,1,3])
+    with cols_f[0]:
+        numf = st.number_input("No. of Feeders:", min_value=0, value=st.session_state['num_feeders'], step=1)
+    st.session_state['num_feeders'] = int(numf)
+
+    # adjust feeder list size
+    if len(st.session_state['feeders']) < st.session_state['num_feeders']:
+        for _ in range(st.session_state['num_feeders'] - len(st.session_state['feeders'])):
+            st.session_state['feeders'].append({'l':'0','ct':'0'})
+    elif len(st.session_state['feeders']) > st.session_state['num_feeders']:
+        st.session_state['feeders'] = st.session_state['feeders'][:st.session_state['num_feeders']]
+
+    # display feeders
+    for i in range(st.session_state['num_feeders']):
+        cols_row = st.columns([1,1,1,1,1,1])
+        with cols_row[0]:
+            st.markdown(f"**Q{i+1}**")
+        with cols_row[1]:
+            lval = st.text_input(f"Q{i+1} Load (A)", value=st.session_state['feeders'][i]['l'], key=f"l_{i}")
+            st.session_state['feeders'][i]['l'] = lval
+        with cols_row[2]:
+            ctval = st.text_input(f"Q{i+1} CT Ratio", value=st.session_state['feeders'][i]['ct'], key=f"ct_{i}")
+            st.session_state['feeders'][i]['ct'] = ctval
+
+    submitted = st.form_submit_button("RUN CALCULATION")
+    if submitted:
+        oc_text, ef_text, ct_alerts, flc_lv, flc_hv, isc_lv = compute_reports(st.session_state['sys_vars'], st.session_state['feeders'])
+        if oc_text is None and ct_alerts and ct_alerts[0] == "CTI_ERROR":
+            st.warning("CTI must be greater than or equal to 120ms.")
+        elif oc_text is None:
+            st.error("Invalid inputs. Please check values.")
+        else:
+            st.session_state['oc_text'] = oc_text
+            st.session_state['ef_text'] = ef_text
+            st.success("Calculation completed.")
+
+# Show total connected load (like total_load_display_var)
+try:
+    total_load_val = sum(float(fr['l'] or 0) for fr in st.session_state['feeders'])
+except:
+    total_load_val = 0.0
+st.markdown(f"**Total Connected Load:** {round(total_load_val,2)} A")
+
+# Display reports in tabs (replicating notebook)
+tab1, tab2 = st.tabs(["Overcurrent (Phase)", "Earth Fault (Neutral)"])
+with tab1:
+    st.subheader("Overcurrent (Phase)")
+    st.text_area("Report", value=st.session_state['oc_text'], height=300, key="oc_area")
+    # Optionally allow copy
+    st.download_button("Download Overcurrent Report (TXT)", data=st.session_state['oc_text'], file_name="overcurrent_report.txt")
+
+with tab2:
+    st.subheader("Earth Fault (Neutral)")
+    st.text_area("Report", value=st.session_state['ef_text'], height=300, key="ef_area")
+    st.download_button("Download Earth Fault Report (TXT)", data=st.session_state['ef_text'], file_name="earthfault_report.txt")
+
+# Save Tabulated CSV (either via sidebar button or this area)
+if st.session_state.get('_save_csv', False):
+    oc_text = st.session_state['oc_text']
+    ef_text = st.session_state['ef_text']
+    csv_str = generate_tabulated_csv(oc_text, ef_text)
+    st.session_state['_save_csv'] = False
+    st.download_button("Download Tabulated CSV", data=csv_str, file_name="tabulated_report.csv", mime="text/csv")
+
+# Save PDF
+if st.session_state.get('_save_pdf', False):
+    oc_text = st.session_state['oc_text']
+    ef_text = st.session_state['ef_text']
+    if not HAS_FPDF:
+        st.error("FPDF package not available on server. Include fpdf in requirements to enable PDF export.")
+        st.session_state['_save_pdf'] = False
     else:
-        st.warning("Please run calculation first before saving CSV.")
+        pdf_bytes = generate_pdf_bytes(oc_text, ef_text)
+        st.session_state['_save_pdf'] = False
+        if pdf_bytes:
+            st.download_button("Download Report PDF", data=pdf_bytes, file_name="nea_report.pdf", mime="application/pdf")
 
-# PDF Generation
-if 'save_pdf' in st.session_state and st.session_state.save_pdf:
-    st.session_state.save_pdf = False
-    if st.session_state.oc_report and st.session_state.ef_report:
-        try:
-            # Check if FPDF is available
-            try:
-                from fpdf import FPDF
-                
-                # Create PDF
-                pdf = FPDF()
-                pdf.add_page()
-                
-                # Add title
-                pdf.set_font("Arial", 'B', 14)
-                pdf.cell(200, 10, txt="NEA Protection Coordination Report", ln=True, align='C')
-                pdf.ln(10)
-                
-                # Add date
-                from datetime import datetime
-                pdf.set_font("Arial", '', 10)
-                pdf.cell(200, 5, txt=f"Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", ln=True, align='C')
-                pdf.ln(5)
-                
-                # Add content
-                pdf.set_font("Courier", '', 8)
-                
-                # Write OC report
-                pdf.set_font("Arial", 'B', 10)
-                pdf.cell(200, 8, txt="OVERCURRENT (PHASE) REPORT", ln=True)
-                pdf.set_font("Courier", '', 8)
-                
-                for line in st.session_state.oc_report.split('\n'):
-                    # Handle long lines
-                    if len(line) > 95:
-                        # Split long lines
-                        while len(line) > 95:
-                            try:
-                                pdf.cell(200, 4, txt=line[:95], ln=True)
-                            except:
-                                pdf.cell(200, 4, txt=line[:95].encode('latin-1', 'ignore').decode('latin-1'), ln=True)
-                            line = line[95:]
-                        if line:
-                            try:
-                                pdf.cell(200, 4, txt=line, ln=True)
-                            except:
-                                pdf.cell(200, 4, txt=line.encode('latin-1', 'ignore').decode('latin-1'), ln=True)
-                    else:
-                        try:
-                            pdf.cell(200, 4, txt=line, ln=True)
-                        except:
-                            pdf.cell(200, 4, txt=line.encode('latin-1', 'ignore').decode('latin-1'), ln=True)
-                
-                pdf.ln(5)
-                
-                # Write EF report
-                pdf.set_font("Arial", 'B', 10)
-                pdf.cell(200, 8, txt="EARTH FAULT (NEUTRAL) REPORT", ln=True)
-                pdf.set_font("Courier", '', 8)
-                
-                for line in st.session_state.ef_report.split('\n'):
-                    # Handle long lines
-                    if len(line) > 95:
-                        # Split long lines
-                        while len(line) > 95:
-                            try:
-                                pdf.cell(200, 4, txt=line[:95], ln=True)
-                            except:
-                                pdf.cell(200, 4, txt=line[:95].encode('latin-1', 'ignore').decode('latin-1'), ln=True)
-                            line = line[95:]
-                        if line:
-                            try:
-                                pdf.cell(200, 4, txt=line, ln=True)
-                            except:
-                                pdf.cell(200, 4, txt=line.encode('latin-1', 'ignore').decode('latin-1'), ln=True)
-                    else:
-                        try:
-                            pdf.cell(200, 4, txt=line, ln=True)
-                        except:
-                            pdf.cell(200, 4, txt=line.encode('latin-1', 'ignore').decode('latin-1'), ln=True)
-                
-                # Save to bytes
-                pdf_buffer = io.BytesIO()
-                pdf_output = pdf.output(dest='S').encode('latin-1')
-                pdf_buffer.write(pdf_output)
-                pdf_buffer.seek(0)
-                
-                # Store PDF data in session state
-                st.session_state.pdf_data = pdf_buffer.getvalue()
-                st.session_state.show_pdf_download = True
-                
-            except ImportError:
-                st.error("FPDF library not available. Please install it using: pip install fpdf")
-            except Exception as e:
-                st.error(f"Error creating PDF: {e}")
-                
-        except Exception as e:
-            st.error(f"Error in PDF generation: {e}")
-    else:
-        st.warning("Please run calculation first before saving PDF.")
+# Provide direct download buttons in UI as well
+csv_str_ui = generate_tabulated_csv(st.session_state['oc_text'], st.session_state['ef_text'])
+st.download_button("Download Tabulated CSV", data=csv_str_ui, file_name="tabulated_report.csv", mime="text/csv")
 
-# Display download buttons
-if st.session_state.show_csv_download and st.session_state.csv_data:
-    b64 = base64.b64encode(st.session_state.csv_data.encode()).decode()
-    href = f'<a href="data:file/csv;base64,{b64}" download="protection_coordination.csv" class="download-btn">📥 Download CSV File</a>'
-    st.markdown(href, unsafe_allow_html=True)
-
-if st.session_state.show_pdf_download and st.session_state.pdf_data:
-    b64 = base64.b64encode(st.session_state.pdf_data).decode()
-    href = f'<a href="data:application/pdf;base64,{b64}" download="protection_coordination.pdf" class="download-btn">📥 Download PDF File</a>'
-    st.markdown(href, unsafe_allow_html=True)
+if HAS_FPDF:
+    pdf_bytes_ui = generate_pdf_bytes(st.session_state['oc_text'], st.session_state['ef_text'])
+    if pdf_bytes_ui:
+        st.download_button("Download Report PDF", data=pdf_bytes_ui, file_name="nea_report.pdf", mime="application/pdf")
+else:
+    st.info("PDF export requires fpdf in requirements.txt")
 
 # Footer
 st.markdown("---")
-st.markdown('<p class="footer">By Protection and Automation Division, GOD</p>', unsafe_allow_html=True)
+st.markdown("By Protection and Automation Division, GOD")
