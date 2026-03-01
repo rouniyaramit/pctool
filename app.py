@@ -1,57 +1,67 @@
 import os
 import streamlit as st
 
-# -------------------- PAGE CONFIG --------------------
-st.set_page_config(
-    page_title="NEA Protection & Coordination Tools",
-    layout="wide",
-)
+st.set_page_config(page_title="NEA Protection & Coordination Tools", layout="wide")
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-LOGO_PATH = os.path.join(BASE_DIR, "logo.jpg")
 
-# -------------------- FULL DESKTOP CSS --------------------
+# Prefer logo.jpg, fallback to logo.png
+LOGO_JPG = os.path.join(BASE_DIR, "logo.jpg")
+LOGO_PNG = os.path.join(BASE_DIR, "logo.png")
+LOGO_PATH = LOGO_JPG if os.path.exists(LOGO_JPG) else LOGO_PNG
+
+# -------------------- HARDENED CSS (kills the top bar) --------------------
 st.markdown("""
 <style>
+/* ===== Hide all Streamlit chrome (multiple versions) ===== */
+#MainMenu {display:none !important;}
+footer {display:none !important;}
 
-/* ===== REMOVE ALL STREAMLIT UI ===== */
-header {visibility: hidden !important;}
-footer {visibility: hidden !important;}
-#MainMenu {visibility: hidden !important;}
+/* Header + toolbars + decorations */
+header, header[data-testid="stHeader"] {display:none !important;}
 [data-testid="stToolbar"] {display:none !important;}
 [data-testid="stDecoration"] {display:none !important;}
-[data-testid="stSidebar"] {display:none !important;}
+[data-testid="stAppToolbar"] {display:none !important;}
+[data-testid="stTopNav"] {display:none !important;}
 [data-testid="stStatusWidget"] {display:none !important;}
+[data-testid="stSidebar"] {display:none !important;}
 
-/* REMOVE TOP WHITE BAR */
-[data-testid="stAppViewContainer"] > .main {
-    padding-top: 0rem !important;
+/* Sometimes the bar is created by these wrappers */
+div[data-testid="stVerticalBlockBorderWrapper"] {border:0 !important; padding:0 !important; margin:0 !important;}
+div[data-testid="stVerticalBlock"] {gap: 0.0rem !important;}
+
+/* Remove padding that can look like a bar */
+.block-container {padding:0 !important; margin:0 !important;}
+[data-testid="stAppViewContainer"] > .main {padding:0 !important; margin:0 !important;}
+[data-testid="stAppViewContainer"] {padding:0 !important; margin:0 !important;}
+
+/* Kill any top “spacer” elements */
+div.st-emotion-cache-1kyxreq, 
+div.st-emotion-cache-1avcm0n,
+div.st-emotion-cache-18ni7ap,
+div.st-emotion-cache-z5fcl4 {
+    display:none !important;
 }
 
-/* FULL SCREEN BACKGROUND */
+/* Full-screen gray background + no scroll */
 html, body, [data-testid="stAppViewContainer"] {
     background: #dcdcdc !important;
     overflow: hidden !important;
 }
 
-/* REMOVE DEFAULT PADDING */
-.block-container {
-    padding: 0 !important;
-}
-
-/* ===== EXE WINDOW LOOK ===== */
+/* ===== EXE window panel ===== */
 .window {
     width: 980px;
     max-width: 95%;
-    margin: 20px auto;
+    margin: 18px auto;
     background: #efefef;
     border: 1px solid #b5b5b5;
     border-radius: 10px;
-    padding: 20px;
+    padding: 20px 22px 20px 22px;
     box-shadow: 0 12px 26px rgba(0,0,0,0.25);
 }
 
-/* TITLE */
+/* Title */
 .title {
     text-align:center;
     font-size: 34px;
@@ -61,7 +71,7 @@ html, body, [data-testid="stAppViewContainer"] {
     color:#1f1f1f;
 }
 
-/* BUTTONS */
+/* Buttons */
 .tkbtn {
     display:block;
     width: 660px;
@@ -76,32 +86,31 @@ html, body, [data-testid="stAppViewContainer"] {
     border-radius:6px;
     border:1px solid rgba(0,0,0,0.2);
     box-shadow:0 3px 0 rgba(0,0,0,0.2);
-    transition:0.15s;
+    transition: filter 0.12s ease, transform 0.05s ease;
 }
 .tkbtn:hover {filter:brightness(1.08);}
-.tkbtn:active {transform:translateY(1px);}
+.tkbtn:active {transform: translateY(1px);}
 
-/* COLORS */
+/* Colors */
 .blue1{background:#0b74c7;}
 .blue2{background:#0a63b5;}
 .purp1{background:#4a35c8;}
 .purp2{background:#36157d;}
 
-/* FOOTER */
+/* Footer */
 .footer{
     text-align:center;
     margin-top:28px;
     font-style:italic;
     color:#4b4b4b;
     font-size:14px;
+    line-height:1.5;
 }
-
 </style>
 """, unsafe_allow_html=True)
 
-# -------------------- PAGE NAVIGATION --------------------
-params = st.query_params
-page = params.get("page", None)
+# -------------------- Navigation via query param --------------------
+page = st.query_params.get("page", None)
 
 if page:
     mapping = {
@@ -110,25 +119,23 @@ if page:
         "theory": "pages/4_Theory.py",
         "working": "pages/5_Working.py",
     }
-    if page in mapping:
-        st.switch_page(mapping[page])
+    target = mapping.get(page)
+    if target:
+        st.switch_page(target)
 
-# -------------------- MAIN EXE WINDOW --------------------
+# -------------------- UI --------------------
 st.markdown("<div class='window'>", unsafe_allow_html=True)
 
-# CENTER LOGO (Tkinter style)
+# Center logo
 if os.path.exists(LOGO_PATH):
-    col1, col2, col3 = st.columns([3,1,3])
-    with col2:
+    c1, c2, c3 = st.columns([3, 1, 3])
+    with c2:
         st.image(LOGO_PATH, width=150)
 
-# TITLE
-st.markdown(
-    "<div class='title'>NEA Protection &amp; Coordination Tools</div>",
-    unsafe_allow_html=True
-)
+# Title
+st.markdown("<div class='title'>NEA Protection &amp; Coordination Tools</div>", unsafe_allow_html=True)
 
-# BUTTONS
+# Buttons
 st.markdown("""
 <a class='tkbtn blue1' href='?page=tcc'>Open Protection Coordination Tool (TCC Plot)</a>
 <a class='tkbtn blue2' href='?page=ocef'>Open OC / EF Grid Coordination Tool</a>
@@ -136,10 +143,10 @@ st.markdown("""
 <a class='tkbtn purp2' href='?page=working'>Open Working Methodology / Manual</a>
 """, unsafe_allow_html=True)
 
-# FOOTER
+# Footer
 st.markdown("""
 <div class='footer'>
-Protection and Automation Division, GOD<br>
+Protection and Automation Division, GOD<br/>
 Nepal Electricity Authority
 </div>
 """, unsafe_allow_html=True)
