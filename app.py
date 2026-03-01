@@ -1,49 +1,132 @@
+import os
 import streamlit as st
 
-st.set_page_config(page_title="NEA Protection Suite", layout="wide")
+# ----------------- Config -----------------
+st.set_page_config(
+    page_title="NEA Protection & Coordination Tools",
+    layout="wide",
+)
 
-# -------- Tkinter Clone Global CSS --------
-st.markdown("""
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+LOGO_PATH = os.path.join(BASE_DIR, "logo.png")
+
+# ----------------- CSS (Tkinter Clone Start Screen) -----------------
+st.markdown(
+    """
 <style>
-/* Hide Streamlit sidebar completely */
-[data-testid="stSidebar"] {display: none !important;}
-/* Reduce big paddings */
-.block-container {padding-top: 6px !important; padding-bottom: 8px !important; padding-left: 14px !important; padding-right: 14px !important;}
-/* Make buttons feel like Tkinter */
-div.stButton > button {
-    height: 36px !important;
-    padding: 0px 14px !important;
-    font-weight: 800 !important;
-    border-radius: 6px !important;
+/* Hide sidebar */
+[data-testid="stSidebar"] {display:none !important;}
+
+/* Tight padding */
+.block-container{
+    padding-top: 10px !important;
+    padding-left: 14px !important;
+    padding-right: 14px !important;
+    padding-bottom: 10px !important;
 }
-/* Compact inputs like Tkinter */
-label {font-size: 13px !important; font-weight: 600 !important;}
-input, textarea {font-size: 14px !important;}
-/* Remove extra whitespace between widgets */
-[data-testid="stVerticalBlock"] {gap: 0.45rem !important;}
+
+/* Centered content like Tkinter master window */
+.center-wrap{
+    max-width: 900px;
+    margin: 0 auto;
+    text-align: center;
+}
+
+/* Title */
+.main-title{
+    font-size: 34px;
+    font-weight: 900;
+    margin-top: 8px;
+    margin-bottom: 22px;
+    color: #222;
+}
+
+/* Button base style */
+div.stButton > button{
+    height: 62px !important;
+    font-size: 18px !important;
+    font-weight: 900 !important;
+    border-radius: 6px !important;
+    border: 0px !important;
+}
+
+/* Color wrappers for buttons */
+.btn-blue button{background:#0a74c9 !important; color:white !important;}
+.btn-blue2 button{background:#0a5fb0 !important; color:white !important;}
+.btn-purple button{background:#4a2cc2 !important; color:white !important;}
+.btn-purple2 button{background:#35127a !important; color:white !important;}
+
+/* Footer */
+.footer{
+    margin-top: 44px;
+    font-style: italic;
+    color: #555;
+    font-size: 15px;
+}
+
+/* Reduce empty whitespace between widgets */
+div[data-testid="stVerticalBlock"]{gap: 0.55rem !important;}
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True
+)
 
-# -------- Tkinter-like top menu bar --------
-menu = st.columns([1.2, 1.1, 1.1, 0.9, 0.9, 3.8], gap="small")
+# ----------------- Navigation helper -----------------
+def go(page_path: str):
+    """
+    Navigate to a multipage file inside /pages.
+    Requires Streamlit >= 1.31.0 for st.switch_page.
+    """
+    try:
+        st.switch_page(page_path)
+    except Exception:
+        st.error(
+            "Navigation failed. Please update Streamlit in requirements.txt:\n"
+            "streamlit>=1.31.0"
+        )
 
-with menu[0]:
-    if st.button("MASTER", use_container_width=True):
-        st.switch_page("pages/1_MASTER_LAUNCHER.py")
-with menu[1]:
-    if st.button("TCC TOOL", use_container_width=True):
-        st.switch_page("pages/2_GUI_Final5_TCC.py")
-with menu[2]:
-    if st.button("OC/EF TOOL", use_container_width=True):
-        st.switch_page("pages/3_OC_EF_GOD.py")
-with menu[3]:
-    if st.button("THEORY", use_container_width=True):
-        st.switch_page("pages/4_Theory.py")
-with menu[4]:
-    if st.button("WORKING", use_container_width=True):
-        st.switch_page("pages/5_Working.py")
+# ----------------- UI -----------------
+st.markdown("<div class='center-wrap'>", unsafe_allow_html=True)
 
-st.markdown("<hr style='margin:6px 0 10px 0;'>", unsafe_allow_html=True)
+# Logo (top center)
+if os.path.exists(LOGO_PATH):
+    st.image(LOGO_PATH, width=180)
+else:
+    st.warning("logo.png not found in root folder.")
 
-st.title("NEA Protection Suite (Tkinter Clone UI)")
-st.caption("Use the top menu buttons (like Tkinter menu bar).")
+# Title
+st.markdown("<div class='main-title'>NEA Protection &amp; Coordination Tools</div>", unsafe_allow_html=True)
+
+# Buttons
+st.markdown("<div class='btn-blue'>", unsafe_allow_html=True)
+if st.button("Open Protection Coordination Tool (TCC Plot)", use_container_width=True):
+    go("pages/2_GUI_Final5_TCC.py")
+st.markdown("</div>", unsafe_allow_html=True)
+
+st.markdown("<div class='btn-blue2'>", unsafe_allow_html=True)
+if st.button("Open OC / EF Grid Coordination Tool", use_container_width=True):
+    go("pages/3_OC_EF_GOD.py")
+st.markdown("</div>", unsafe_allow_html=True)
+
+st.markdown("<div class='btn-purple'>", unsafe_allow_html=True)
+if st.button("Open Protection Theory Guide", use_container_width=True):
+    go("pages/4_Theory.py")
+st.markdown("</div>", unsafe_allow_html=True)
+
+st.markdown("<div class='btn-purple2'>", unsafe_allow_html=True)
+if st.button("Open Working Methodology / Manual", use_container_width=True):
+    go("pages/5_Working.py")
+st.markdown("</div>", unsafe_allow_html=True)
+
+# Footer
+st.markdown(
+    """
+<div class='footer'>
+Protection and Automation Division, GOD<br/>
+Nepal Electricity Authority
+</div>
+""",
+    unsafe_allow_html=True
+)
+
+st.markdown("</div>", unsafe_allow_html=True)
