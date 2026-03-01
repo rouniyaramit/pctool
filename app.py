@@ -34,7 +34,7 @@ The rounded white bar is OUTSIDE your app (Streamlit Cloud wrapper).
 So we reserve space for it and center our "EXE window" below it.
 Adjust TOP_BAR_SPACE if needed.
 */
-:root { --TOP_BAR_SPACE: 140px; }  /* try 100px / 140px if you want */
+:root { --TOP_BAR_SPACE: 100px; }  /* try 100px / 140px if you want */
 
 .app-wrap{
     height: calc(100vh - var(--TOP_BAR_SPACE));
@@ -142,4 +142,5 @@ Nepal Electricity Authority
 """, unsafe_allow_html=True)
 
 st.markdown("</div></div>", unsafe_allow_html=True)
+
 
