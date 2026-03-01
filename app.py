@@ -1,5 +1,6 @@
 import os
 import streamlit as st
+import streamlit.components.v1 as components
 
 st.set_page_config(page_title="NEA Protection & Coordination Tools", layout="wide")
 
@@ -10,15 +11,14 @@ LOGO_JPG = os.path.join(BASE_DIR, "logo.jpg")
 LOGO_PNG = os.path.join(BASE_DIR, "logo.png")
 LOGO_PATH = LOGO_JPG if os.path.exists(LOGO_JPG) else LOGO_PNG
 
-# -------------------- HARDENED CSS (kills the top bar) --------------------
+# -------------------- Kill Streamlit UI + EXE look --------------------
 st.markdown("""
 <style>
-/* ===== Hide all Streamlit chrome (multiple versions) ===== */
+/* Hide Streamlit UI */
 #MainMenu {display:none !important;}
 footer {display:none !important;}
-
-/* Header + toolbars + decorations */
-header, header[data-testid="stHeader"] {display:none !important;}
+header {display:none !important;}
+header[data-testid="stHeader"] {display:none !important;}
 [data-testid="stToolbar"] {display:none !important;}
 [data-testid="stDecoration"] {display:none !important;}
 [data-testid="stAppToolbar"] {display:none !important;}
@@ -26,30 +26,18 @@ header, header[data-testid="stHeader"] {display:none !important;}
 [data-testid="stStatusWidget"] {display:none !important;}
 [data-testid="stSidebar"] {display:none !important;}
 
-/* Sometimes the bar is created by these wrappers */
-div[data-testid="stVerticalBlockBorderWrapper"] {border:0 !important; padding:0 !important; margin:0 !important;}
-div[data-testid="stVerticalBlock"] {gap: 0.0rem !important;}
-
-/* Remove padding that can look like a bar */
+/* Remove padding that can create top gap */
 .block-container {padding:0 !important; margin:0 !important;}
 [data-testid="stAppViewContainer"] > .main {padding:0 !important; margin:0 !important;}
 [data-testid="stAppViewContainer"] {padding:0 !important; margin:0 !important;}
 
-/* Kill any top “spacer” elements */
-div.st-emotion-cache-1kyxreq, 
-div.st-emotion-cache-1avcm0n,
-div.st-emotion-cache-18ni7ap,
-div.st-emotion-cache-z5fcl4 {
-    display:none !important;
-}
-
-/* Full-screen gray background + no scroll */
+/* Full background */
 html, body, [data-testid="stAppViewContainer"] {
     background: #dcdcdc !important;
     overflow: hidden !important;
 }
 
-/* ===== EXE window panel ===== */
+/* EXE window panel */
 .window {
     width: 980px;
     max-width: 95%;
@@ -57,7 +45,7 @@ html, body, [data-testid="stAppViewContainer"] {
     background: #efefef;
     border: 1px solid #b5b5b5;
     border-radius: 10px;
-    padding: 20px 22px 20px 22px;
+    padding: 20px 22px;
     box-shadow: 0 12px 26px rgba(0,0,0,0.25);
 }
 
@@ -109,9 +97,53 @@ html, body, [data-testid="stAppViewContainer"] {
 </style>
 """, unsafe_allow_html=True)
 
+# -------------------- JS: remove that rounded white top bar --------------------
+# This script looks for a "white rounded rectangle with shadow" near the top,
+# then removes it. Works across Streamlit Cloud UI changes.
+components.html(
+    """
+<script>
+(function(){
+  function removeTopBar(){
+    const divs = Array.from(document.querySelectorAll('div'));
+    for (const d of divs){
+      const r = d.getBoundingClientRect();
+      if (!r || r.width < 500 || r.height < 35 || r.height > 120) continue;
+      if (r.top < -5 || r.top > 80) continue;   // near the top
+      const cs = window.getComputedStyle(d);
+
+      // Looks like that bar: white-ish background, rounded corners, has shadow, and minimal text
+      const bg = cs.backgroundColor || "";
+      const br = cs.borderRadius || "";
+      const bs = cs.boxShadow || "";
+      const hasShadow = bs && bs !== "none";
+      const rounded = br && br !== "0px";
+      const whiteish = bg.includes("255, 255, 255") || bg.includes("rgba(255, 255, 255");
+      const almostNoText = (d.innerText || "").trim().length === 0;
+
+      if (hasShadow && rounded && whiteish && almostNoText){
+        d.remove();
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // Try multiple times because Streamlit mounts UI after load
+  let tries = 0;
+  const timer = setInterval(() => {
+    tries++;
+    const done = removeTopBar();
+    if (done || tries > 40) clearInterval(timer);
+  }, 150);
+})();
+</script>
+""",
+    height=0,
+)
+
 # -------------------- Navigation via query param --------------------
 page = st.query_params.get("page", None)
-
 if page:
     mapping = {
         "tcc": "pages/2_GUI_Final5_TCC.py",
@@ -131,6 +163,8 @@ if os.path.exists(LOGO_PATH):
     c1, c2, c3 = st.columns([3, 1, 3])
     with c2:
         st.image(LOGO_PATH, width=150)
+else:
+    st.warning("Logo not found. Put logo.jpg (preferred) or logo.png in the root folder.")
 
 # Title
 st.markdown("<div class='title'>NEA Protection &amp; Coordination Tools</div>", unsafe_allow_html=True)
