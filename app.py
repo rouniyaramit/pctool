@@ -3,11 +3,6 @@ import streamlit as st
 
 st.set_page_config(page_title="NEA Protection & Coordination Tools", layout="wide")
 
-# -------------------- FORCE EMBED MODE (kills Cloud wrapper bar) --------------------
-if "embed" not in st.query_params:
-    st.query_params["embed"] = "true"
-    st.rerun()
-
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # Prefer logo.jpg, fallback to logo.png
@@ -15,16 +10,17 @@ LOGO_JPG = os.path.join(BASE_DIR, "logo.jpg")
 LOGO_PNG = os.path.join(BASE_DIR, "logo.png")
 LOGO_PATH = LOGO_JPG if os.path.exists(LOGO_JPG) else LOGO_PNG
 
-# -------------------- CSS: EXE Desktop Look --------------------
+# -------------------- CSS: EXE Desktop Look (inside app) --------------------
 st.markdown("""
 <style>
-/* Hide Streamlit UI inside app */
+/* Hide Streamlit UI inside the app */
 #MainMenu {display:none !important;}
 footer {display:none !important;}
 header {display:none !important;}
-[data-testid="stSidebar"] {display:none !important;}
+header[data-testid="stHeader"] {display:none !important;}
 [data-testid="stToolbar"] {display:none !important;}
 [data-testid="stDecoration"] {display:none !important;}
+[data-testid="stSidebar"] {display:none !important;}
 
 /* Remove padding */
 .block-container {padding:0 !important; margin:0 !important;}
@@ -98,6 +94,7 @@ html, body, [data-testid="stAppViewContainer"] {
 """, unsafe_allow_html=True)
 
 # -------------------- Navigation via query param --------------------
+# NOTE: we do NOT set ?embed=true programmatically (Streamlit forbids it)
 page = st.query_params.get("page", None)
 if page:
     mapping = {
@@ -109,6 +106,10 @@ if page:
     target = mapping.get(page)
     if target:
         st.switch_page(target)
+
+# Keep embed=true in links if user opened with embed already
+embed_flag = "true" if str(st.query_params.get("embed", "")).lower() == "true" else None
+embed_prefix = "embed=true&" if embed_flag else ""
 
 # -------------------- UI --------------------
 st.markdown("<div class='window'>", unsafe_allow_html=True)
@@ -123,11 +124,11 @@ if os.path.exists(LOGO_PATH):
 st.markdown("<div class='title'>NEA Protection &amp; Coordination Tools</div>", unsafe_allow_html=True)
 
 # Buttons
-st.markdown("""
-<a class='tkbtn blue1' href='?embed=true&page=tcc'>Open Protection Coordination Tool (TCC Plot)</a>
-<a class='tkbtn blue2' href='?embed=true&page=ocef'>Open OC / EF Grid Coordination Tool</a>
-<a class='tkbtn purp1' href='?embed=true&page=theory'>Open Protection Theory Guide</a>
-<a class='tkbtn purp2' href='?embed=true&page=working'>Open Working Methodology / Manual</a>
+st.markdown(f"""
+<a class='tkbtn blue1' href='?{embed_prefix}page=tcc'>Open Protection Coordination Tool (TCC Plot)</a>
+<a class='tkbtn blue2' href='?{embed_prefix}page=ocef'>Open OC / EF Grid Coordination Tool</a>
+<a class='tkbtn purp1' href='?{embed_prefix}page=theory'>Open Protection Theory Guide</a>
+<a class='tkbtn purp2' href='?{embed_prefix}page=working'>Open Working Methodology / Manual</a>
 """, unsafe_allow_html=True)
 
 # Footer
