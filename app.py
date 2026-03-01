@@ -4,54 +4,44 @@ import streamlit as st
 st.set_page_config(page_title="NEA Protection & Coordination Tools", layout="wide")
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Prefer logo.jpg, fallback to logo.png
 LOGO_JPG = os.path.join(BASE_DIR, "logo.jpg")
 LOGO_PNG = os.path.join(BASE_DIR, "logo.png")
 LOGO_PATH = LOGO_JPG if os.path.exists(LOGO_JPG) else LOGO_PNG
 
-# -------------------- CSS: EXE look + compensate for Cloud top bar --------------------
+# -------------------- CSS: EXE Desktop Look (inside app) --------------------
 st.markdown("""
 <style>
-/* Hide Streamlit UI INSIDE the app */
+/* Hide Streamlit UI inside the app */
 #MainMenu {display:none !important;}
-header {display:none !important;}
 footer {display:none !important;}
-[data-testid="stSidebar"] {display:none !important;}
+header {display:none !important;}
+header[data-testid="stHeader"] {display:none !important;}
 [data-testid="stToolbar"] {display:none !important;}
 [data-testid="stDecoration"] {display:none !important;}
+[data-testid="stSidebar"] {display:none !important;}
 
 /* Remove padding */
 .block-container {padding:0 !important; margin:0 !important;}
 [data-testid="stAppViewContainer"] > .main {padding:0 !important; margin:0 !important;}
+[data-testid="stAppViewContainer"] {padding:0 !important; margin:0 !important;}
 
-/* App background */
+/* Background + no scroll */
 html, body, [data-testid="stAppViewContainer"] {
     background: #dcdcdc !important;
+    overflow: hidden !important;
 }
 
-/*
-IMPORTANT:
-The rounded white bar is OUTSIDE your app (Streamlit Cloud wrapper).
-So we reserve space for it and center our "EXE window" below it.
-Adjust TOP_BAR_SPACE if needed.
-*/
-:root { --TOP_BAR_SPACE: 100px; }  /* try 100px / 140px if you want */
-
-.app-wrap{
-    height: calc(100vh - var(--TOP_BAR_SPACE));
-    display:flex;
-    align-items:center;     /* vertical center */
-    justify-content:center; /* horizontal center */
-    overflow:hidden;
-}
-
-/* EXE window */
+/* EXE window panel */
 .window {
     width: 980px;
     max-width: 95%;
+    margin: 18px auto;
     background: #efefef;
     border: 1px solid #b5b5b5;
     border-radius: 10px;
-    padding: 22px 22px 18px 22px;
+    padding: 20px 22px;
     box-shadow: 0 12px 26px rgba(0,0,0,0.25);
 }
 
@@ -94,7 +84,7 @@ Adjust TOP_BAR_SPACE if needed.
 /* Footer */
 .footer{
     text-align:center;
-    margin-top:26px;
+    margin-top:28px;
     font-style:italic;
     color:#4b4b4b;
     font-size:14px;
@@ -103,7 +93,8 @@ Adjust TOP_BAR_SPACE if needed.
 </style>
 """, unsafe_allow_html=True)
 
-# -------------------- Navigation --------------------
+# -------------------- Navigation via query param --------------------
+# NOTE: we do NOT set ?embed=true programmatically (Streamlit forbids it)
 page = st.query_params.get("page", None)
 if page:
     mapping = {
@@ -116,8 +107,12 @@ if page:
     if target:
         st.switch_page(target)
 
+# Keep embed=true in links if user opened with embed already
+embed_flag = "true" if str(st.query_params.get("embed", "")).lower() == "true" else None
+embed_prefix = "embed=true&" if embed_flag else ""
+
 # -------------------- UI --------------------
-st.markdown("<div class='app-wrap'><div class='window'>", unsafe_allow_html=True)
+st.markdown("<div class='window'>", unsafe_allow_html=True)
 
 # Center logo
 if os.path.exists(LOGO_PATH):
@@ -125,15 +120,18 @@ if os.path.exists(LOGO_PATH):
     with c2:
         st.image(LOGO_PATH, width=150)
 
+# Title
 st.markdown("<div class='title'>NEA Protection &amp; Coordination Tools</div>", unsafe_allow_html=True)
 
-st.markdown("""
-<a class='tkbtn blue1' href='?page=tcc'>Open Protection Coordination Tool (TCC Plot)</a>
-<a class='tkbtn blue2' href='?page=ocef'>Open OC / EF Grid Coordination Tool</a>
-<a class='tkbtn purp1' href='?page=theory'>Open Protection Theory Guide</a>
-<a class='tkbtn purp2' href='?page=working'>Open Working Methodology / Manual</a>
+# Buttons
+st.markdown(f"""
+<a class='tkbtn blue1' href='?{embed_prefix}page=tcc'>Open Protection Coordination Tool (TCC Plot)</a>
+<a class='tkbtn blue2' href='?{embed_prefix}page=ocef'>Open OC / EF Grid Coordination Tool</a>
+<a class='tkbtn purp1' href='?{embed_prefix}page=theory'>Open Protection Theory Guide</a>
+<a class='tkbtn purp2' href='?{embed_prefix}page=working'>Open Working Methodology / Manual</a>
 """, unsafe_allow_html=True)
 
+# Footer
 st.markdown("""
 <div class='footer'>
 Protection and Automation Division, GOD<br/>
@@ -141,6 +139,4 @@ Nepal Electricity Authority
 </div>
 """, unsafe_allow_html=True)
 
-st.markdown("</div></div>", unsafe_allow_html=True)
-
-
+st.markdown("</div>", unsafe_allow_html=True)
