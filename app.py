@@ -6,18 +6,18 @@ st.set_page_config(page_title="NEA Protection & Coordination Tools", layout="wid
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# Use your NEW logo (logo.jpg). If jpg not found, fallback to logo.png.
+# Use logo.jpg first, fallback to logo.png
 LOGO_JPG = os.path.join(BASE_DIR, "logo.jpg")
 LOGO_PNG = os.path.join(BASE_DIR, "logo.png")
 LOGO_PATH = LOGO_JPG if os.path.exists(LOGO_JPG) else LOGO_PNG
 
-# -------------------- CSS: Desktop/Tkinter Look --------------------
+# -------------------- CSS --------------------
 st.markdown("""
 <style>
 /* Hide sidebar */
 [data-testid="stSidebar"] {display:none !important;}
 
-/* Remove Streamlit top header space */
+/* Remove Streamlit top header */
 header[data-testid="stHeader"] {display:none !important;}
 
 /* Remove default padding */
@@ -28,11 +28,11 @@ html, body, [data-testid="stAppViewContainer"] {
     background: #dcdcdc !important;
 }
 
-/* Center "window" panel */
+/* Center main panel */
 .window {
     width: 980px;
     max-width: 94%;
-    margin: 18px auto;
+    margin: 20px auto;
     background: #efefef;
     border: 1px solid #bdbdbd;
     border-radius: 10px;
@@ -40,26 +40,17 @@ html, body, [data-testid="stAppViewContainer"] {
     box-shadow: 0px 10px 24px rgba(0,0,0,0.18);
 }
 
-/* subtle top bar */
-.topbar {
-    height: 10px;
-    background: linear-gradient(180deg, #f8f8f8, #e6e6e6);
-    border-radius: 8px;
-    margin-bottom: 10px;
-}
-
 /* Title */
 .title {
     text-align:center;
     font-size: 34px;
     font-weight: 900;
-    margin-top: 6px;
+    margin-top: 8px;
     margin-bottom: 18px;
     color: #1f1f1f;
-    letter-spacing: 0.3px;
 }
 
-/* Buttons (Tkinter style) */
+/* Buttons */
 .tkbtn {
     display:block;
     width: 660px;
@@ -74,13 +65,8 @@ html, body, [data-testid="stAppViewContainer"] {
     text-align:center;
     border: 1px solid rgba(0,0,0,0.20);
     box-shadow: 0px 3px 0px rgba(0,0,0,0.18);
-    transition: transform 0.06s ease, filter 0.15s ease;
 }
 .tkbtn:hover { filter: brightness(1.08); }
-.tkbtn:active {
-    transform: translateY(1px);
-    box-shadow: 0px 2px 0px rgba(0,0,0,0.18);
-}
 
 /* Button colors */
 .blue1 { background:#0b74c7; }
@@ -100,7 +86,7 @@ html, body, [data-testid="stAppViewContainer"] {
 </style>
 """, unsafe_allow_html=True)
 
-# -------------------- Navigation via query param --------------------
+# -------------------- Navigation --------------------
 params = st.query_params
 page = params.get("page", None)
 
@@ -120,20 +106,17 @@ if page:
 
 # -------------------- UI --------------------
 st.markdown("<div class='window'>", unsafe_allow_html=True)
-st.markdown("<div class='topbar'></div>", unsafe_allow_html=True)
 
-# ✅ Logo centered (Tkinter-like)
+# LOGO CENTERED
 if os.path.exists(LOGO_PATH):
-    c1, c2, c3 = st.columns([3, 1, 3])
+    c1, c2, c3 = st.columns([3,1,3])
     with c2:
         st.image(LOGO_PATH, width=150)
-else:
-    st.warning("Logo not found. Place 'logo.jpg' (preferred) or 'logo.png' in the root folder.")
 
-# Title
+# TITLE
 st.markdown("<div class='title'>NEA Protection &amp; Coordination Tools</div>", unsafe_allow_html=True)
 
-# Buttons (HTML - stable styling on Streamlit Cloud)
+# BUTTONS
 st.markdown("""
 <a class="tkbtn blue1" href="?page=tcc">Open Protection Coordination Tool (TCC Plot)</a>
 <a class="tkbtn blue2" href="?page=ocef">Open OC / EF Grid Coordination Tool</a>
@@ -141,7 +124,7 @@ st.markdown("""
 <a class="tkbtn purp2" href="?page=working">Open Working Methodology / Manual</a>
 """, unsafe_allow_html=True)
 
-# Footer
+# FOOTER
 st.markdown("""
 <div class="footer">
 Protection and Automation Division, GOD<br/>
