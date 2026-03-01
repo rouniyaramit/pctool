@@ -6,9 +6,86 @@ from typing import List, Optional, Tuple
 
 import streamlit as st
 
+# ===================== Paths =====================
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-LOGO_PATH = os.path.join(BASE_DIR, "logo.jpg")
+LOGO_PATH = os.path.join(BASE_DIR, "logo.png")
 
+# ===================== Tkinter-Clone CSS =====================
+st.set_page_config(
+    page_title="Nepal Electricity Authority (NEA) Grid Protection Coordination Tool",
+    layout="wide",
+)
+
+st.markdown(
+    """
+<style>
+/* Hide Streamlit sidebar */
+[data-testid="stSidebar"] {display:none !important;}
+
+/* Tight paddings like Tkinter */
+.block-container {
+    padding-top: 6px !important;
+    padding-left: 14px !important;
+    padding-right: 14px !important;
+    padding-bottom: 10px !important;
+}
+
+/* Reduce widget spacing */
+div[data-testid="stVerticalBlock"] {gap: 0.35rem !important;}
+
+/* Frames like Tkinter */
+.tk_left {
+    background:#e9e9e9;
+    border:1px solid #c9c9c9;
+    border-radius:10px;
+    padding:12px;
+}
+.tk_right {
+    background:#ffffff;
+    border:1px solid #c9c9c9;
+    border-radius:10px;
+    padding:12px;
+}
+.tk_header {
+    font-size: 22px;
+    font-weight: 900;
+}
+.tk_small {
+    font-size: 13px;
+    font-weight: 800;
+}
+
+/* Compact label/input */
+label {font-size: 13px !important; font-weight: 700 !important;}
+input, textarea {font-size: 14px !important;}
+
+/* Buttons */
+div.stButton > button {
+    height: 38px !important;
+    font-weight: 900 !important;
+    border-radius: 6px !important;
+}
+
+/* Report box style (similar to Tkinter text area) */
+textarea {
+    font-family: Consolas, monospace !important;
+    font-size: 13.5px !important;
+}
+
+/* Alerts */
+.alert_red {
+    color:#b00020;
+    font-weight: 900;
+}
+
+/* Small separator */
+hr {margin: 6px 0 10px 0;}
+</style>
+""",
+    unsafe_allow_html=True
+)
+
+# ===================== Helpers =====================
 def safe_float(x) -> Optional[float]:
     try:
         s = str(x).strip()
@@ -19,37 +96,62 @@ def safe_float(x) -> Optional[float]:
         return None
 
 def default_state():
-    # Same idea as preload_data in OC_EF_GOD.py (3 feeders default)
+    # Default like your tool: 3 feeders ready
     return {
         "mva": "16.6",
         "hv": "33",
         "lv": "11",
         "z": "10",
         "cti": "150",
-        "q4": "900",
-        "q5": "300",
+        "q4ct": "900",
+        "q5ct": "300",
         "num_feeders": "3",
         "feeders": [
-            {"load": "0", "ct": "0"},
-            {"load": "0", "ct": "0"},
-            {"load": "0", "ct": "0"},
+            {"load": "200", "ct": "400"},
+            {"load": "250", "ct": "400"},
+            {"load": "300", "ct": "400"},
         ],
+        "last_oc": "",
+        "last_ef": "",
+        "last_alerts": [],
     }
 
+def blank_state():
+    return {
+        "mva": "",
+        "hv": "",
+        "lv": "",
+        "z": "",
+        "cti": "",
+        "q4ct": "",
+        "q5ct": "",
+        "num_feeders": "0",
+        "feeders": [],
+        "last_oc": "",
+        "last_ef": "",
+        "last_alerts": [],
+    }
+
+# ===================== Core Logic (same math) =====================
 def calculate(state: dict) -> Tuple[str, str, List[str]]:
     alerts: List[str] = []
 
-    cti_ms = float(state["cti"])
+    cti_ms = safe_float(state["cti"])
+    if cti_ms is None:
+        raise ValueError("CTI (ms) is invalid.")
     if cti_ms < 120:
-        raise ValueError("CTI must be greater than or equal to 120ms.")
-    cti_s = cti_ms / 1000.0
+        raise ValueError("CTI must be >= 120ms.")
 
-    mva = float(state["mva"])
-    hv_v = float(state["hv"])
-    lv_v = float(state["lv"])
-    z_pct = float(state["z"])
-    q4_ct = float(state["q4"])
-    q5_ct = float(state["q5"])
+    mva = safe_float(state["mva"])
+    hv_v = safe_float(state["hv"])
+    lv_v = safe_float(state["lv"])
+    z_pct = safe_float(state["z"])
+    q4_ct = safe_float(state["q4ct"])
+    q5_ct = safe_float(state["q5ct"])
+    if None in (mva, hv_v, lv_v, z_pct, q4_ct, q5_ct):
+        raise ValueError("Transformer/System inputs invalid.")
+
+    cti_s = cti_ms / 1000.0
 
     flc_lv = round((mva * 1000) / (math.sqrt(3) * lv_v), 2)
     flc_hv = round((mva * 1000) / (math.sqrt(3) * hv_v), 2)
@@ -57,245 +159,342 @@ def calculate(state: dict) -> Tuple[str, str, List[str]]:
     if_lv = round(isc_lv * 0.9, 2)
     if_hv = round(if_lv / (hv_v / lv_v), 2)
 
-    total_load, max_t_oc, max_t_ef = 0.0, 0.0, 0.0
-    f_oc_txt, f_ef_txt = "", ""
-    ct_alerts = []
+    # feeders
+    try:
+        nfeed = int(float(state["num_feeders"]))
+        if nfeed < 0:
+            nfeed = 0
+    except Exception:
+        nfeed = 0
 
-    feeders = state["feeders"]
+    feeders = state["feeders"][:nfeed]
 
-    for i, f in enumerate(feeders):
-        l = float(f["load"])
-        ct = float(f["ct"])
+    total_load = 0.0
+    max_t_oc = 0.0
+    max_t_ef = 0.0
+
+    feeder_oc_txt = ""
+    feeder_ef_txt = ""
+    ct_alerts: List[str] = []
+
+    for i, row in enumerate(feeders):
+        l = safe_float(row.get("load", "")) or 0.0
+        ct = safe_float(row.get("ct", "")) or 0.0
         total_load += l
 
         if ct < l:
-            ct_alerts.append(f"ALERT: Feeder Q{i+1} CT ({ct}A) is less than Load ({l}A)\n")
+            ct_alerts.append(f"ALERT: Feeder Q{i+1} CT ({ct}A) is less than Load ({l}A)")
 
-        # OC
+        # -------- OC feeder --------
         p_oc = round(1.1 * l, 2)
-        r1 = round(p_oc / ct, 2) if ct != 0 else 0.0
+        r1 = round(p_oc / ct, 2) if ct != 0 else float("inf")
         t_oc = round(0.025 * (0.14 / (math.pow(max(1.05, if_lv / max(p_oc, 1e-9)), 0.02) - 1)), 3)
         max_t_oc = max(max_t_oc, t_oc)
+
         p2 = round(3 * l, 2)
-        r2 = round(p2 / ct, 2) if ct != 0 else 0.0
-        f_oc_txt += (
+        r2 = round(p2 / ct, 2) if ct != 0 else float("inf")
+
+        feeder_oc_txt += (
             f"FEEDER Q{i+1}: Load={l}A, CT={ct}\n"
             f" - S1 (IDMT): Pickup={p_oc}A ({r1}*In), TMS=0.025, Time={t_oc}s\n"
             f" - S2 (DT):   Pickup={p2}A ({r2}*In), Time=0.0s\n\n"
         )
 
-        # EF
+        # -------- EF feeder --------
         p_ef = round(0.15 * l, 2)
-        r_ef1 = round(p_ef / ct, 2) if ct != 0 else 0.0
+        r_ef1 = round(p_ef / ct, 2) if ct != 0 else float("inf")
         t_ef = round(0.025 * (0.14 / (math.pow(max(1.05, if_lv / max(p_ef, 1e-9)), 0.02) - 1)), 3)
         max_t_ef = max(max_t_ef, t_ef)
+
         p_ef2 = round(1.0 * l, 2)
-        r_ef2 = round(p_ef2 / ct, 2) if ct != 0 else 0.0
-        f_ef_txt += (
+        r_ef2 = round(p_ef2 / ct, 2) if ct != 0 else float("inf")
+
+        feeder_ef_txt += (
             f"FEEDER Q{i+1}: Load={l}A, CT={ct}\n"
             f" - S1 (IDMT): Pickup={p_ef}A ({r_ef1}*In), TMS=0.025, Time={t_ef}s\n"
             f" - S2 (DT):   Pickup={p_ef2}A ({r_ef2}*In), Time=0.0s\n\n"
         )
 
+    # HV load
     hv_load = total_load / (hv_v / lv_v)
 
     if q4_ct < total_load:
-        ct_alerts.append(f"ALERT: Q4 Incomer CT ({q4_ct}A) is less than Total Load ({total_load}A)\n")
+        ct_alerts.append(f"ALERT: Q4 Incomer CT ({q4_ct}A) is less than Total Load ({total_load}A)")
     if q5_ct < hv_load:
-        ct_alerts.append(f"ALERT: Q5 HV CT ({q5_ct}A) is less than HV Load ({round(hv_load,2)}A)\n")
+        ct_alerts.append(f"ALERT: Q5 HV CT ({q5_ct}A) is less than HV Load ({round(hv_load,2)}A)")
 
+    # Transformer overload
+    if total_load > flc_lv:
+        alerts.append(f"CRITICAL ALERT: TRANSFORMER OVERLOAD ({total_load}A > {flc_lv}A)")
+
+    alerts.extend(ct_alerts)
+
+    head = f"FLC LV: {flc_lv}A | FLC HV: {flc_hv}A | Short Circuit: {isc_lv}A\n" + "=" * 60 + "\n"
+
+    # Incomer + HV coordination blocks
     coord_data = [
         ("INCOMER Q4 (LV)", q4_ct, if_lv, 1, round(0.9 * isc_lv, 2), cti_ms, max_t_oc, max_t_ef),
-        ("HV SIDE Q5 (HV)", q5_ct, if_hv, hv_v / lv_v, round(if_hv, 2), cti_ms * 2, max_t_oc + cti_s, max_t_ef + cti_s)
+        ("HV SIDE Q5 (HV)", q5_ct, if_hv, hv_v / lv_v, round(if_hv, 2), cti_ms * 2, max_t_oc + cti_s, max_t_ef + cti_s),
     ]
 
-    i_oc, i_ef = "", ""
+    incomer_oc_txt = ""
+    incomer_ef_txt = ""
+
     for name, ct_v, fault, scale, s3, dt_ms, t_prev_oc, t_prev_ef in coord_data:
         l_cur = total_load / scale
+
         t_req_oc = round(t_prev_oc + cti_s, 3)
         t_req_ef = round(t_prev_ef + cti_s, 3)
 
+        # OC incomer
         p_oc = round(1.1 * l_cur, 2)
-        r1 = round(p_oc / ct_v, 2) if ct_v != 0 else 0.0
+        r1 = round(p_oc / ct_v, 2) if ct_v != 0 else float("inf")
         tms_oc = round(t_req_oc / (0.14 / (math.pow(max(1.05, fault / max(p_oc, 1e-9)), 0.02) - 1)), 3)
+
         p2 = round(3 * l_cur, 2)
-        r2 = round(p2 / ct_v, 2) if ct_v != 0 else 0.0
-        r3 = round(s3 / ct_v, 2) if ct_v != 0 else 0.0
-        i_oc += (
+        r2 = round(p2 / ct_v, 2) if ct_v != 0 else float("inf")
+        r3 = round(s3 / ct_v, 2) if ct_v != 0 else float("inf")
+
+        incomer_oc_txt += (
             f"{name}: Load={round(l_cur,2)}A, CT={ct_v}\n"
             f" - S1 (IDMT): Pickup={p_oc}A ({r1}*In), TMS={tms_oc}, Time={t_req_oc}s\n"
             f" - S2 (DT):   Pickup={p2}A ({r2}*In), Time={dt_ms/1000}s\n"
             f" - S3 (DT):   Pickup={s3}A ({r3}*In), Time=0.0s\n\n"
         )
 
+        # EF incomer
         p_ef = round(0.15 * l_cur, 2)
-        r_ef1 = round(p_ef / ct_v, 2) if ct_v != 0 else 0.0
+        r_ef1 = round(p_ef / ct_v, 2) if ct_v != 0 else float("inf")
         tms_ef = round(t_req_ef / (0.14 / (math.pow(max(1.05, fault / max(p_ef, 1e-9)), 0.02) - 1)), 3)
+
         p_ef2 = round(1.0 * l_cur, 2)
-        r_ef2 = round(p_ef2 / ct_v, 2) if ct_v != 0 else 0.0
-        r_ef3 = round(s3 / ct_v, 2) if ct_v != 0 else 0.0
-        i_ef += (
+        r_ef2 = round(p_ef2 / ct_v, 2) if ct_v != 0 else float("inf")
+        r_ef3 = round(s3 / ct_v, 2) if ct_v != 0 else float("inf")
+
+        incomer_ef_txt += (
             f"{name}: Load={round(l_cur,2)}A, CT={ct_v}\n"
             f" - S1 (IDMT): Pickup={p_ef}A ({r_ef1}*In), TMS={tms_ef}, Time={t_req_ef}s\n"
             f" - S2 (DT):   Pickup={p_ef2}A ({r_ef2}*In), Time={dt_ms/1000}s\n"
             f" - S3 (DT):   Pickup={s3}A ({r_ef3}*In), Time=0.0s\n\n"
         )
 
-    head = f"FLC LV: {flc_lv}A | FLC HV: {flc_hv}A | Short Circuit: {isc_lv}A\n" + "=" * 60 + "\n"
-
-    if total_load > flc_lv:
-        alerts.append(f"CRITICAL ALERT: TRANSFORMER OVERLOAD ({total_load}A > {flc_lv}A)\n")
-    alerts.extend(ct_alerts)
-
-    oc_report = head + f_oc_txt + i_oc
-    ef_report = head + f_ef_txt + i_ef
+    oc_report = head + feeder_oc_txt + incomer_oc_txt
+    ef_report = head + feeder_ef_txt + incomer_ef_txt
     return oc_report, ef_report, alerts
 
-
-# ================== UI (Tkinter-like) ==================
-st.set_page_config(page_title="Nepal Electricity Authority (NEA) Grid Protection Coordination Tool", layout="wide")
-
-st.markdown(
-    """
-    <style>
-      .block-container {padding-top: 10px;}
-      .footer {color:#555; font-style:italic; font-size:14px; text-align:center; padding-top:10px;}
-      .total {color:#d9534f; font-weight:800;}
-    </style>
-    """,
-    unsafe_allow_html=True
-)
-
+# ===================== Session State =====================
 if "grid_state" not in st.session_state:
     st.session_state.grid_state = default_state()
+
 state = st.session_state.grid_state
 
-st.title("Nepal Electricity Authority (NEA) Grid Protection Coordination Tool")
-
-# Top frame with inputs + logo right (like Tkinter)
-top_left, top_right = st.columns([6, 1])
-with top_left:
-    st.subheader("Transformer & System Data (Inputs)")
-
-    params = [("MVA", "mva"), ("HV (kV)", "hv"), ("LV (kV)", "lv"), ("Z%", "z"), ("CTI (ms)", "cti"), ("Q4 CT", "q4"), ("Q5 CT", "q5")]
-    cols = st.columns(len(params))
-    for i, (lab, key) in enumerate(params):
-        state[key] = cols[i].text_input(lab, value=state[key])
-with top_right:
+# ===================== Header (Tkinter-like) =====================
+top = st.columns([6.2, 1.0], gap="small")
+with top[0]:
+    st.markdown("<div class='tk_header'>Nepal Electricity Authority (NEA) Grid Protection Coordination Tool</div>", unsafe_allow_html=True)
+with top[1]:
     if os.path.exists(LOGO_PATH):
-        st.image(LOGO_PATH, width=90)
+        st.image(LOGO_PATH, width=95)
 
-# "File menu" (like Tkinter menu bar)
-with st.expander("File", expanded=False):
-    c1, c2, c3, c4, c5 = st.columns(5)
-    with c1:
-        if st.button("Preload Default Data"):
-            st.session_state.grid_state = default_state()
-            st.rerun()
-    with c2:
-        st.caption("Save Tabulated CSV shown after RUN")
-    with c3:
-        st.caption("Save PDF (optional)")
-    with c4:
-        if st.button("Reset"):
-            st.session_state.grid_state = {"mva":"","hv":"","lv":"","z":"","cti":"","q4":"","q5":"","num_feeders":"0","feeders":[]}
-            st.rerun()
-    with c5:
-        st.caption("Exit: close browser tab")
+st.markdown("<hr>", unsafe_allow_html=True)
 
-st.subheader("Feeder Configuration")
+# ===================== Main Layout =====================
+left, right = st.columns([1.05, 1.95], gap="small")
 
-# No. of feeders + Update Rows
-ctrl1, ctrl2, ctrl3 = st.columns([1, 1, 4])
-with ctrl1:
-    state["num_feeders"] = ctrl1.text_input("No. of Feeders:", value=state["num_feeders"])
-with ctrl2:
-    update_rows = st.button("Update Rows")
+# -------- LEFT PANEL: Inputs + Feeder Table + Buttons --------
+with left:
+    st.markdown("<div class='tk_left'>", unsafe_allow_html=True)
 
-# Update feeder rows like Tkinter Update Rows button
-if update_rows:
-    try:
-        n = int(float(state["num_feeders"]))
-        if n < 0:
+    st.markdown("<div class='tk_small'>Transformer & System Data (Inputs)</div>", unsafe_allow_html=True)
+
+    # compact 2-row grid like Tkinter style
+    r1 = st.columns(3, gap="small")
+    state["mva"] = r1[0].text_input("MVA", value=state["mva"])
+    state["hv"]  = r1[1].text_input("HV (kV)", value=state["hv"])
+    state["lv"]  = r1[2].text_input("LV (kV)", value=state["lv"])
+
+    r2 = st.columns(3, gap="small")
+    state["z"]    = r2[0].text_input("Z %", value=state["z"])
+    state["cti"]  = r2[1].text_input("CTI (ms)", value=state["cti"])
+    state["q4ct"] = r2[2].text_input("Q4 CT", value=state["q4ct"])
+
+    r3 = st.columns(3, gap="small")
+    state["q5ct"] = r3[0].text_input("Q5 CT", value=state["q5ct"])
+    state["num_feeders"] = r3[1].text_input("No. of Feeders", value=state["num_feeders"])
+    update_rows = r3[2].button("Update Rows", use_container_width=True)
+
+    # Update feeder list length (Tkinter Update Rows)
+    if update_rows:
+        try:
+            n = int(float(state["num_feeders"]))
+            if n < 0:
+                n = 0
+        except Exception:
             n = 0
-    except Exception:
-        n = 0
-    state["feeders"] = state.get("feeders", [])
-    while len(state["feeders"]) < n:
-        state["feeders"].append({"load": "0", "ct": "0"})
-    state["feeders"] = state["feeders"][:n]
 
-# Feeder rows
-feeders = state.get("feeders", [])
-total_load = 0.0
-for i in range(len(feeders)):
-    row = feeders[i]
-    r1, r2, r3, r4 = st.columns([1.2, 1, 1.2, 3])
-    r1.write(f"Q{i+1} Load (A):")
-    row["load"] = r2.text_input("", value=row["load"], key=f"load_{i}")
-    r3.write("CT Ratio:")
-    row["ct"] = r4.text_input("", value=row["ct"], key=f"ct_{i}")
+        feeders = state.get("feeders", [])
+        while len(feeders) < n:
+            feeders.append({"load": "0", "ct": "0"})
+        feeders = feeders[:n]
+        state["feeders"] = feeders
+        st.session_state.grid_state = state
+        st.rerun()
 
+    st.markdown("<hr>", unsafe_allow_html=True)
+    st.markdown("<div class='tk_small'>Feeder Configuration</div>", unsafe_allow_html=True)
+
+    # Ensure feeders list exists
     try:
-        total_load += float(row["load"])
+        nfeed_now = int(float(state["num_feeders"]))
+        if nfeed_now < 0:
+            nfeed_now = 0
     except Exception:
-        pass
+        nfeed_now = 0
 
-st.markdown(f'<div class="total">Total Connected Load: {round(total_load,2)} A</div>', unsafe_allow_html=True)
+    feeders = state.get("feeders", [])
+    while len(feeders) < nfeed_now:
+        feeders.append({"load": "0", "ct": "0"})
+    feeders = feeders[:nfeed_now]
+    state["feeders"] = feeders
 
-# RUN button like Tkinter
-run = st.button("RUN CALCULATION", type="primary", use_container_width=True)
+    # feeder table (compact)
+    total_load = 0.0
+    h = st.columns([0.55, 1.0, 1.0], gap="small")
+    h[0].markdown("**Feeder**")
+    h[1].markdown("**Load (A)**")
+    h[2].markdown("**CT (A)**")
 
-if run:
-    try:
-        # Validate numeric first (like Tkinter behavior)
-        required = ["mva","hv","lv","z","cti","q4","q5"]
-        for k in required:
-            float(state[k])  # raises if invalid
-        for f in feeders:
-            float(f["load"]); float(f["ct"])
+    for i in range(nfeed_now):
+        row = feeders[i]
+        c = st.columns([0.55, 1.0, 1.0], gap="small")
+        c[0].write(f"Q{i+1}")
+        row["load"] = c[1].text_input("", value=row.get("load", "0"), key=f"load_{i}")
+        row["ct"]   = c[2].text_input("", value=row.get("ct", "0"), key=f"ct_{i}")
 
-        oc_report, ef_report, alerts = calculate(state)
+        total_load += safe_float(row["load"]) or 0.0
 
-        # Show RED_BOLD alerts
-        if alerts:
-            for a in alerts:
-                st.error(a.strip())
+    st.markdown(f"<div class='alert_red'>Total Connected Load: {round(total_load,2)} A</div>", unsafe_allow_html=True)
 
-        t1, t2 = st.tabs([" Overcurrent (Phase) ", " Earth Fault (Neutral) "])
-        with t1:
-            st.text_area("OC Report", value=oc_report, height=420)
-        with t2:
-            st.text_area("EF Report", value=ef_report, height=420)
+    st.markdown("<hr>", unsafe_allow_html=True)
 
-        # Save CSV (tabulated) like Tkinter save_csv()
-        csv_buf = io.StringIO()
-        w = csv.writer(csv_buf)
+    # Buttons row like Tkinter
+    b = st.columns([1.15, 1.15, 1.7], gap="small")
+    preload = b[0].button("Preload Default Data", use_container_width=True)
+    reset   = b[1].button("Reset", use_container_width=True)
+    run     = b[2].button("RUN CALCULATION", type="primary", use_container_width=True)
+
+    if preload:
+        st.session_state.grid_state = default_state()
+        st.rerun()
+
+    if reset:
+        st.session_state.grid_state = blank_state()
+        st.rerun()
+
+    st.markdown("**By Protection and Automation Division, GOD**")
+    st.markdown("</div>", unsafe_allow_html=True)
+
+# -------- RIGHT PANEL: Reports side-by-side (OC | EF) --------
+with right:
+    st.markdown("<div class='tk_right'>", unsafe_allow_html=True)
+    st.markdown("<div class='tk_small'>Reports (Side-by-side like Tkinter)</div>", unsafe_allow_html=True)
+
+    # Alerts at top of right panel
+    if state.get("last_alerts"):
+        for a in state["last_alerts"]:
+            st.error(a)
+
+    # When run, compute and store reports
+    if "run" in locals() and run:
+        try:
+            oc_report, ef_report, alerts = calculate(state)
+            state["last_oc"] = oc_report
+            state["last_ef"] = ef_report
+            state["last_alerts"] = alerts
+            st.session_state.grid_state = state
+            st.rerun()
+        except Exception as e:
+            st.error(f"Invalid Inputs: {e}")
+
+    # Side-by-side text areas
+    rcols = st.columns(2, gap="small")
+    with rcols[0]:
+        st.markdown("**Overcurrent (Phase)**")
+        st.text_area("", value=state.get("last_oc", ""), height=540, key="oc_box")
+    with rcols[1]:
+        st.markdown("**Earth Fault (Neutral)**")
+        st.text_area("", value=state.get("last_ef", ""), height=540, key="ef_box")
+
+    st.markdown("<hr>", unsafe_allow_html=True)
+
+    # Download Tabulated CSV (like Tkinter save_csv)
+    def make_tabulated_csv(oc_text: str, ef_text: str) -> bytes:
+        buf = io.StringIO()
+        w = csv.writer(buf)
         w.writerow(["EQUIPMENT", "FAULT TYPE", "STAGE", "PICKUP (A)", "RATIO (*In)", "TMS/DELAY", "TIME (s)"])
 
-        def parse_and_write(txt: str, label: str):
-            curr = ""
-            for line in txt.split("\n"):
-                if ":" in line and "Load" in line:
-                    curr = line.split(":")[0]
-                elif "- S" in line:
-                    p = line.split(":")
-                    stage = p[0].strip("- ").strip()
-                    details = p[1].split(",")
-                    pick_raw = details[0].split("=")[1].strip()
-                    val = pick_raw.split("(")[0].strip()
-                    rat = pick_raw.split("(")[1].replace("*In)", "").strip() if "(" in pick_raw else ""
-                    tms = details[1].split("=")[1].strip() if len(details) > 1 else ""
-                    op = details[2].split("=")[1].strip() if len(details) > 2 else "0.0s"
-                    w.writerow([curr, label, stage, val, rat, tms, op])
+        def parse_report(text: str, fault_type: str):
+            curr_equipment = ""
+            for line in text.splitlines():
+                line = line.strip()
+                if not line:
+                    continue
 
-        parse_and_write(oc_report, "Overcurrent")
-        parse_and_write(ef_report, "Earth Fault")
+                # Detect equipment line: "FEEDER Q1: ..." or "INCOMER Q4 (LV): ..."
+                if ":" in line and ("FEEDER" in line or "INCOMER" in line or "HV SIDE" in line):
+                    curr_equipment = line.split(":")[0].strip()
 
-        st.download_button("Save Tabulated CSV", data=csv_buf.getvalue().encode("utf-8"),
-                           file_name="NEA_Tabulated_Report.csv", mime="text/csv")
+                # Detect stage line: "- S1 (IDMT): Pickup=..., ..."
+                if line.startswith("- S"):
+                    # Stage name (before colon)
+                    stage = line.split(":")[0].replace("-", "").strip()
+                    # After colon
+                    rhs = line.split(":", 1)[1].strip()
 
-    except Exception as e:
-        st.error(f"Invalid Inputs: {e}")
+                    # Try extract Pickup=xxxA (ratio)
+                    pickup_val = ""
+                    ratio_val = ""
+                    tms_delay = ""
+                    time_val = ""
 
-st.markdown('<div class="footer">By Protection and Automation Division, GOD</div>', unsafe_allow_html=True)
+                    parts = [p.strip() for p in rhs.split(",")]
+
+                    # Pickup
+                    for p in parts:
+                        if p.startswith("Pickup="):
+                            pickup_raw = p.split("=", 1)[1].strip()  # "123A (0.3*In)"
+                            if "(" in pickup_raw and "*)" not in pickup_raw:
+                                pickup_val = pickup_raw.split("(")[0].replace("A", "").strip()
+                                ratio_val = pickup_raw.split("(")[1].replace(")", "").replace("*In", "").strip()
+                            else:
+                                pickup_val = pickup_raw.replace("A", "").strip()
+
+                        if p.startswith("TMS=") or "TMS=" in p:
+                            tms_delay = p.split("=", 1)[1].strip()
+
+                        if p.startswith("Time=") or "Time=" in p:
+                            time_val = p.split("=", 1)[1].replace("s", "").strip()
+
+                    w.writerow([curr_equipment, fault_type, stage, pickup_val, ratio_val, tms_delay, time_val])
+
+        if oc_text:
+            parse_report(oc_text, "Overcurrent")
+        if ef_text:
+            parse_report(ef_text, "Earth Fault")
+
+        return buf.getvalue().encode("utf-8")
+
+    oc_text = state.get("last_oc", "")
+    ef_text = state.get("last_ef", "")
+    if oc_text or ef_text:
+        st.download_button(
+            "Save Tabulated CSV",
+            data=make_tabulated_csv(oc_text, ef_text),
+            file_name="NEA_Tabulated_Report.csv",
+            mime="text/csv",
+            use_container_width=True,
+        )
+    else:
+        st.info("Run calculation to enable CSV export.")
+
+    st.markdown("</div>", unsafe_allow_html=True)
