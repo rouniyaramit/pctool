@@ -4,15 +4,14 @@ import streamlit as st
 st.set_page_config(page_title="NEA Protection & Coordination Tools", layout="wide")
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
 LOGO_JPG = os.path.join(BASE_DIR, "logo.jpg")
 LOGO_PNG = os.path.join(BASE_DIR, "logo.png")
 LOGO_PATH = LOGO_JPG if os.path.exists(LOGO_JPG) else LOGO_PNG
 
-# ---- CSS: EXE feel + no internal Streamlit chrome ----
+# -------------------- CSS: EXE look + compensate for Cloud top bar --------------------
 st.markdown("""
 <style>
-/* Hide Streamlit UI inside the app */
+/* Hide Streamlit UI INSIDE the app */
 #MainMenu {display:none !important;}
 header {display:none !important;}
 footer {display:none !important;}
@@ -20,22 +19,32 @@ footer {display:none !important;}
 [data-testid="stToolbar"] {display:none !important;}
 [data-testid="stDecoration"] {display:none !important;}
 
-/* Full app background + remove padding */
+/* Remove padding */
+.block-container {padding:0 !important; margin:0 !important;}
+[data-testid="stAppViewContainer"] > .main {padding:0 !important; margin:0 !important;}
+
+/* App background */
 html, body, [data-testid="stAppViewContainer"] {
     background: #dcdcdc !important;
 }
-.block-container {padding:0 !important;}
-[data-testid="stAppViewContainer"] > .main {padding:0 !important;}
 
-/* Reserve space for the Streamlit Cloud top bar so our UI looks clean */
-.app-wrap {
-    height: calc(100vh - 120px);   /* adjust if your bar height differs */
-    display: flex;
-    align-items: center;           /* vertical center */
-    justify-content: center;       /* horizontal center */
+/*
+IMPORTANT:
+The rounded white bar is OUTSIDE your app (Streamlit Cloud wrapper).
+So we reserve space for it and center our "EXE window" below it.
+Adjust TOP_BAR_SPACE if needed.
+*/
+:root { --TOP_BAR_SPACE: 120px; }  /* try 100px / 140px if you want */
+
+.app-wrap{
+    height: calc(100vh - var(--TOP_BAR_SPACE));
+    display:flex;
+    align-items:center;     /* vertical center */
+    justify-content:center; /* horizontal center */
+    overflow:hidden;
 }
 
-/* EXE window panel */
+/* EXE window */
 .window {
     width: 980px;
     max-width: 95%;
@@ -94,7 +103,7 @@ html, body, [data-testid="stAppViewContainer"] {
 </style>
 """, unsafe_allow_html=True)
 
-# ---- Navigation ----
+# -------------------- Navigation --------------------
 page = st.query_params.get("page", None)
 if page:
     mapping = {
@@ -107,7 +116,7 @@ if page:
     if target:
         st.switch_page(target)
 
-# ---- UI ----
+# -------------------- UI --------------------
 st.markdown("<div class='app-wrap'><div class='window'>", unsafe_allow_html=True)
 
 # Center logo
