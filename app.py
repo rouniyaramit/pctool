@@ -1,10 +1,15 @@
 import os
 import streamlit as st
 
+# -------------------- Page Config --------------------
 st.set_page_config(page_title="NEA Protection & Coordination Tools", layout="wide")
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-LOGO_PATH = os.path.join(BASE_DIR, "logo.png")
+
+# Use your NEW logo (logo.jpg). If jpg not found, fallback to logo.png.
+LOGO_JPG = os.path.join(BASE_DIR, "logo.jpg")
+LOGO_PNG = os.path.join(BASE_DIR, "logo.png")
+LOGO_PATH = LOGO_JPG if os.path.exists(LOGO_JPG) else LOGO_PNG
 
 # -------------------- CSS: Desktop/Tkinter Look --------------------
 st.markdown("""
@@ -123,12 +128,12 @@ if os.path.exists(LOGO_PATH):
     with c2:
         st.image(LOGO_PATH, width=150)
 else:
-    st.warning("logo.png not found in root folder.")
+    st.warning("Logo not found. Place 'logo.jpg' (preferred) or 'logo.png' in the root folder.")
 
 # Title
 st.markdown("<div class='title'>NEA Protection &amp; Coordination Tools</div>", unsafe_allow_html=True)
 
-# Buttons (HTML - stable style on Streamlit Cloud)
+# Buttons (HTML - stable styling on Streamlit Cloud)
 st.markdown("""
 <a class="tkbtn blue1" href="?page=tcc">Open Protection Coordination Tool (TCC Plot)</a>
 <a class="tkbtn blue2" href="?page=ocef">Open OC / EF Grid Coordination Tool</a>
