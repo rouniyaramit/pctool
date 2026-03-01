@@ -1,8 +1,12 @@
 import os
 import streamlit as st
-import streamlit.components.v1 as components
 
 st.set_page_config(page_title="NEA Protection & Coordination Tools", layout="wide")
+
+# -------------------- FORCE EMBED MODE (kills Cloud wrapper bar) --------------------
+if "embed" not in st.query_params:
+    st.query_params["embed"] = "true"
+    st.rerun()
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -11,27 +15,23 @@ LOGO_JPG = os.path.join(BASE_DIR, "logo.jpg")
 LOGO_PNG = os.path.join(BASE_DIR, "logo.png")
 LOGO_PATH = LOGO_JPG if os.path.exists(LOGO_JPG) else LOGO_PNG
 
-# -------------------- Kill Streamlit UI + EXE look --------------------
+# -------------------- CSS: EXE Desktop Look --------------------
 st.markdown("""
 <style>
-/* Hide Streamlit UI */
+/* Hide Streamlit UI inside app */
 #MainMenu {display:none !important;}
 footer {display:none !important;}
 header {display:none !important;}
-header[data-testid="stHeader"] {display:none !important;}
+[data-testid="stSidebar"] {display:none !important;}
 [data-testid="stToolbar"] {display:none !important;}
 [data-testid="stDecoration"] {display:none !important;}
-[data-testid="stAppToolbar"] {display:none !important;}
-[data-testid="stTopNav"] {display:none !important;}
-[data-testid="stStatusWidget"] {display:none !important;}
-[data-testid="stSidebar"] {display:none !important;}
 
-/* Remove padding that can create top gap */
+/* Remove padding */
 .block-container {padding:0 !important; margin:0 !important;}
 [data-testid="stAppViewContainer"] > .main {padding:0 !important; margin:0 !important;}
 [data-testid="stAppViewContainer"] {padding:0 !important; margin:0 !important;}
 
-/* Full background */
+/* Background + no scroll */
 html, body, [data-testid="stAppViewContainer"] {
     background: #dcdcdc !important;
     overflow: hidden !important;
@@ -97,51 +97,6 @@ html, body, [data-testid="stAppViewContainer"] {
 </style>
 """, unsafe_allow_html=True)
 
-# -------------------- JS: remove that rounded white top bar --------------------
-# This script looks for a "white rounded rectangle with shadow" near the top,
-# then removes it. Works across Streamlit Cloud UI changes.
-components.html(
-    """
-<script>
-(function(){
-  function removeTopBar(){
-    const divs = Array.from(document.querySelectorAll('div'));
-    for (const d of divs){
-      const r = d.getBoundingClientRect();
-      if (!r || r.width < 500 || r.height < 35 || r.height > 120) continue;
-      if (r.top < -5 || r.top > 80) continue;   // near the top
-      const cs = window.getComputedStyle(d);
-
-      // Looks like that bar: white-ish background, rounded corners, has shadow, and minimal text
-      const bg = cs.backgroundColor || "";
-      const br = cs.borderRadius || "";
-      const bs = cs.boxShadow || "";
-      const hasShadow = bs && bs !== "none";
-      const rounded = br && br !== "0px";
-      const whiteish = bg.includes("255, 255, 255") || bg.includes("rgba(255, 255, 255");
-      const almostNoText = (d.innerText || "").trim().length === 0;
-
-      if (hasShadow && rounded && whiteish && almostNoText){
-        d.remove();
-        return true;
-      }
-    }
-    return false;
-  }
-
-  // Try multiple times because Streamlit mounts UI after load
-  let tries = 0;
-  const timer = setInterval(() => {
-    tries++;
-    const done = removeTopBar();
-    if (done || tries > 40) clearInterval(timer);
-  }, 150);
-})();
-</script>
-""",
-    height=0,
-)
-
 # -------------------- Navigation via query param --------------------
 page = st.query_params.get("page", None)
 if page:
@@ -163,18 +118,16 @@ if os.path.exists(LOGO_PATH):
     c1, c2, c3 = st.columns([3, 1, 3])
     with c2:
         st.image(LOGO_PATH, width=150)
-else:
-    st.warning("Logo not found. Put logo.jpg (preferred) or logo.png in the root folder.")
 
 # Title
 st.markdown("<div class='title'>NEA Protection &amp; Coordination Tools</div>", unsafe_allow_html=True)
 
 # Buttons
 st.markdown("""
-<a class='tkbtn blue1' href='?page=tcc'>Open Protection Coordination Tool (TCC Plot)</a>
-<a class='tkbtn blue2' href='?page=ocef'>Open OC / EF Grid Coordination Tool</a>
-<a class='tkbtn purp1' href='?page=theory'>Open Protection Theory Guide</a>
-<a class='tkbtn purp2' href='?page=working'>Open Working Methodology / Manual</a>
+<a class='tkbtn blue1' href='?embed=true&page=tcc'>Open Protection Coordination Tool (TCC Plot)</a>
+<a class='tkbtn blue2' href='?embed=true&page=ocef'>Open OC / EF Grid Coordination Tool</a>
+<a class='tkbtn purp1' href='?embed=true&page=theory'>Open Protection Theory Guide</a>
+<a class='tkbtn purp2' href='?embed=true&page=working'>Open Working Methodology / Manual</a>
 """, unsafe_allow_html=True)
 
 # Footer
