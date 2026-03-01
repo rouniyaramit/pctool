@@ -6,42 +6,51 @@ st.set_page_config(page_title="NEA Protection & Coordination Tools", layout="wid
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 LOGO_PATH = os.path.join(BASE_DIR, "logo.png")
 
-# -------------------- CSS (Tkinter gray background) --------------------
+# -------------------- CSS: Desktop App Look --------------------
 st.markdown("""
 <style>
-/* Hide sidebar */
+/* Hide sidebar + remove default Streamlit header spacing */
 [data-testid="stSidebar"] {display:none !important;}
-
-/* Full-page gray background like Tkinter */
-html, body, [data-testid="stAppViewContainer"] {
-    background: #e6e6e6 !important;
-}
-
-/* Remove extra padding */
+header[data-testid="stHeader"] {display:none !important;}
+/* Reduce top blank area */
 .block-container {
-    padding-top: 0px !important;
-    padding-left: 0px !important;
-    padding-right: 0px !important;
-    padding-bottom: 0px !important;
+    padding: 0rem !important;
 }
 
-/* Center "window panel" (like a Tkinter window placed on gray bg) */
+/* Full background like Tkinter */
+html, body, [data-testid="stAppViewContainer"] {
+    background: #dcdcdc !important;
+}
+
+/* Center panel = Tkinter window feel */
 .window {
     width: 980px;
-    max-width: 92%;
-    margin: 22px auto;
-    background: #f2f2f2;
-    border: 1px solid #c8c8c8;
+    max-width: 94%;
+    margin: 18px auto;
+    background: #efefef;
+    border: 1px solid #bdbdbd;
     border-radius: 10px;
-    padding: 18px 18px 22px 18px;
-    box-shadow: 0px 3px 12px rgba(0,0,0,0.10);
+    padding: 18px 22px 20px 22px;
+    box-shadow: 0px 10px 24px rgba(0,0,0,0.18);
+}
+
+/* Top bar line (subtle) */
+.topbar {
+    height: 10px;
+    background: linear-gradient(180deg, #f8f8f8, #e6e6e6);
+    border-radius: 8px;
+    margin-bottom: 10px;
 }
 
 /* Logo centered */
-.logo img {
-    display:block;
-    margin-left:auto;
-    margin-right:auto;
+.logo-wrap {
+    display:flex;
+    justify-content:center;
+    margin-top: 4px;
+}
+.logo-wrap img {
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: crisp-edges;
 }
 
 /* Title centered */
@@ -49,40 +58,51 @@ html, body, [data-testid="stAppViewContainer"] {
     text-align:center;
     font-size: 34px;
     font-weight: 900;
-    margin-top: 10px;
-    margin-bottom: 22px;
-    color: #222;
+    margin-top: 8px;
+    margin-bottom: 18px;
+    color: #1f1f1f;
+    letter-spacing: 0.3px;
 }
 
-/* Buttons: same feel as Tkinter big buttons */
+/* Button styles: strong contrast like Tkinter */
 .tkbtn {
-    display: block;
-    width: 620px;
-    max-width: 92%;
-    margin: 16px auto;
+    display:block;
+    width: 660px;
+    max-width: 94%;
+    margin: 14px auto;
     padding: 18px 14px;
     font-size: 18px;
     font-weight: 900;
-    color: white !important;
+    color: #ffffff !important;
     text-decoration: none !important;
     border-radius: 6px;
-    text-align: center;
+    text-align:center;
+    border: 1px solid rgba(0,0,0,0.20);
+    box-shadow: 0px 3px 0px rgba(0,0,0,0.18);
+    transition: transform 0.06s ease, filter 0.15s ease;
+}
+.tkbtn:hover {
+    filter: brightness(1.08);
+}
+.tkbtn:active {
+    transform: translateY(1px);
+    box-shadow: 0px 2px 0px rgba(0,0,0,0.18);
 }
 
-/* Colors (match your Tkinter) */
-.blue1 { background: #0a74c9; }
-.blue2 { background: #0a5fb0; }
-.purp1 { background: #4a2cc2; }
-.purp2 { background: #35127a; }
+/* Colors (closer to Tkinter solid colors) */
+.blue1 { background:#0b74c7; }
+.blue2 { background:#0a63b5; }
+.purp1 { background:#4a35c8; }
+.purp2 { background:#36157d; }
 
-/* Footer bottom center like Tkinter */
+/* Footer like Tkinter */
 .footer {
-    text-align: center;
-    margin-top: 42px;
+    text-align:center;
+    margin-top: 30px;
     font-style: italic;
-    color: #555;
-    font-size: 15px;
-    line-height: 1.4;
+    color: #4b4b4b;
+    font-size: 14px;
+    line-height: 1.5;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -107,19 +127,18 @@ if page:
 
 # -------------------- UI --------------------
 st.markdown("<div class='window'>", unsafe_allow_html=True)
+st.markdown("<div class='topbar'></div>", unsafe_allow_html=True)
 
-# Center logo
+# Logo
 if os.path.exists(LOGO_PATH):
-    st.markdown("<div class='logo'>", unsafe_allow_html=True)
-    st.image(LOGO_PATH, width=170)
+    st.markdown("<div class='logo-wrap'>", unsafe_allow_html=True)
+    st.image(LOGO_PATH, width=150)
     st.markdown("</div>", unsafe_allow_html=True)
-else:
-    st.warning("logo.png not found in root folder.")
 
 # Title
 st.markdown("<div class='title'>NEA Protection &amp; Coordination Tools</div>", unsafe_allow_html=True)
 
-# HTML buttons (stable styling on Streamlit Cloud)
+# Buttons (HTML, stable)
 st.markdown("""
 <a class="tkbtn blue1" href="?page=tcc">Open Protection Coordination Tool (TCC Plot)</a>
 <a class="tkbtn blue2" href="?page=ocef">Open OC / EF Grid Coordination Tool</a>
