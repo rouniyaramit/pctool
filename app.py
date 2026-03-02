@@ -15,24 +15,15 @@ st.markdown(
     /* =========================================================
        HIDE STREAMLIT CLOUD UI (best-effort)
        ========================================================= */
-
-    /* Top-right toolbar (Share / icons) */
     [data-testid="stToolbar"] {display: none !important;}
-
-    /* Bottom-right Cloud widgets */
     [data-testid="stStatusWidget"] {display: none !important;}
     [data-testid="stAppDeployButton"] {display: none !important;}
 
-    /* "Manage app" button variations (Cloud changes often) */
     button[title="Manage app"] {display:none !important;}
     a[title="Manage app"] {display:none !important;}
     div[aria-label="Manage app"] {display:none !important;}
     button[aria-label="Manage app"] {display:none !important;}
 
-    /* Sometimes Cloud buttons live in a fixed container */
-    div[style*="position: fixed"][style*="bottom"] {display:none !important;}
-
-    /* Hide header area that can carry Cloud controls */
     header {visibility: hidden !important;}
     header {height: 0px !important;}
 
@@ -44,7 +35,7 @@ st.markdown(
     button[kind="headerNoPadding"] {display:none !important;}
 
     /* =========================================================
-       REMOVE THE BLANK ROUNDED BAR (BaseWeb input wrapper)
+       REMOVE BLANK ROUNDED BAR (BaseWeb input wrapper)
        ========================================================= */
     [data-baseweb="input"] {display:none !important;}
     [data-baseweb="textarea"] {display:none !important;}
@@ -63,6 +54,7 @@ st.markdown(
         padding-top: 1.8rem;
         padding-bottom: 1.0rem;
         max-width: 1200px;
+        min-height: 92vh; /* helps footer sit at the bottom */
     }
 
     hr {display:none !important;}
@@ -118,6 +110,17 @@ st.markdown(
     .b2{ background: linear-gradient(135deg, #1d4ed8 0%, #3b82f6 55%, #60a5fa 100%); }
     .b3{ background: linear-gradient(135deg, #075985 0%, #0284c7 55%, #38bdf8 100%); }
     .b4{ background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 55%, #0b5bd3 100%); }
+
+    /* Footer style */
+    .nea-footer{
+        margin-top: 26px;
+        padding: 14px 0 6px 0;
+        text-align: center;
+        color: #6b7280;
+        font-style: italic;
+        font-weight: 600;
+        line-height: 1.35;
+    }
 
     @media (max-width: 900px){
         .tiles{ grid-template-columns: 1fr; }
@@ -197,3 +200,14 @@ st.markdown(
 )
 
 st.markdown("</div>", unsafe_allow_html=True)
+
+# -------------------- FOOTER (your lines) --------------------
+st.markdown(
+    """
+    <div class="nea-footer">
+        Protection and Automation Division, GOD<br/>
+        Nepal Electricity Authority
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
