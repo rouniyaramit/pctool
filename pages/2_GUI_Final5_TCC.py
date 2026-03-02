@@ -1,69 +1,192 @@
-import io
 import os
+import io
 import csv
-from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
-
 import numpy as np
 import streamlit as st
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 
-# ---- Assets ----
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-LOGO_PATH = os.path.join(BASE_DIR, "logo.png")
-SLD_PATH  = os.path.join(BASE_DIR, "sld.png")
+# =========================
+# CONFIG (per-page)
+# =========================
+st.set_page_config(page_title="NEA Protection Coordination Tool (TCC)", layout="wide")
 
-# ---- CTI (same values) ----
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))         # .../pages
+ROOT_DIR = os.path.dirname(BASE_DIR)                          # repo root
+LOGO_PATH = os.path.join(ROOT_DIR, "logo.jpg")
+SLD_PATH = os.path.join(ROOT_DIR, "sld.png")
+
+# =========================
+# CONSTANTS (same as Tkinter)
+# =========================
 CTI_Q1_Q4 = 0.150
 CTI_Q1_Q5 = 0.300
 CTI_Q4_Q5 = 0.150
 
-# ---- Tkinter Clone CSS ----
-st.set_page_config(page_title="GUI Final5 TCC", layout="wide")
-st.markdown("""
+CURVES = ["Standard Inverse", "Very Inverse", "Extremely Inverse"]
+
+# =========================
+# CSS: Tkinter clone look
+# =========================
+st.markdown(
+    """
 <style>
+/* Hide Streamlit chrome inside the app */
+#MainMenu {display:none !important;}
+header {display:none !important;}
+footer {display:none !important;}
 [data-testid="stSidebar"] {display:none !important;}
-.block-container {padding-top: 6px !important; padding-left: 14px !important; padding-right: 14px !important;}
-/* Frames like Tkinter */
-.tk_left {
-    background:#e9e9e9;
-    border:1px solid #c9c9c9;
-    border-radius:10px;
-    padding:12px;
+[data-testid="stToolbar"] {display:none !important;}
+[data-testid="stDecoration"] {display:none !important;}
+
+/* Backgrounds like Tkinter */
+html, body, [data-testid="stAppViewContainer"] { background: #e6e6e6 !important; }
+.block-container { padding-top: 8px !important; padding-bottom: 10px !important; }
+
+/* Panels */
+.leftPanel {
+    background:#e6e6e6;
+    padding: 10px 12px;
+    border-radius: 6px;
 }
-.tk_right {
+.rightPanel {
     background:#ffffff;
-    border:1px solid #c9c9c9;
-    border-radius:10px;
-    padding:12px;
+    padding: 10px 12px;
+    border-radius: 6px;
+    border: 1px solid #d0d0d0;
 }
-.tk_header {
-    font-size: 22px;
-    font-weight: 900;
+
+/* LabelFrame clone */
+.lf {
+    border: 1px solid #bcbcbc;
+    border-radius: 6px;
+    padding: 10px 10px 8px 10px;
+    margin-bottom: 10px;
+    background: #f2f2f2;
 }
-.tk_small {font-size: 13px; font-weight: 600;}
-/* Compact inputs */
-label {font-size: 13px !important; font-weight: 700 !important;}
-div[data-testid="stVerticalBlock"] {gap: 0.35rem !important;}
-/* Report text box like Tkinter Text widget (black) */
-textarea {
-    background:#000 !important;
-    color:#fff !important;
-    font-family: Consolas, monospace !important;
-    font-size: 14px !important;
+.lfTitle {
+    font-weight: 800;
+    font-size: 14px;
+    margin: -2px 0 8px 0;
 }
-/* Bold buttons */
-div.stButton > button {
-    height: 38px !important;
-    font-weight: 900 !important;
-    border-radius: 6px !important;
+
+/* Report box like Tkinter (black background, white text) */
+.reportBox {
+    background:#000000;
+    color:#ffffff;
+    padding: 10px;
+    border-radius: 6px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    white-space: pre-wrap;
+    line-height: 1.35;
+    border: 1px solid #202020;
+}
+.ok { color: #2ecc71; font-weight: 800; }
+.bad { color: #ff4d4d; font-weight: 800; }
+
+/* Make Streamlit inputs tighter like a grid */
+div[data-testid="stNumberInput"] input,
+div[data-testid="stTextInput"] input {
+    height: 36px !important;
 }
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
-# ---- IEC curve (same) ----
-def iec_curve(I: float, Ip: float, TMS: float, curve: str) -> float:
+# =========================
+# STATE (same as Tkinter fields)
+# =========================
+def _init_state():
+    if "tcc_inited" in st.session_state:
+        return
+
+    st.session_state.t_mva = "16.6"
+    st.session_state.t_hv = "33"
+    st.session_state.t_lv = "11"
+    st.session_state.t_z = "10"
+    st.session_state.fault_a = "7900"
+
+    # 5 relays: Q1..Q5
+    st.session_state.relays = []
+    defaults = [
+        [220, 0.025, 600, 0.0, 0, 0.0],
+        [275, 0.025, 750, 0.0, 0, 0.0],
+        [330, 0.025, 900, 0.0, 0, 0.0],
+        [825, 0.07, 2250, 0.15, 8000, 0.0],
+        [275, 0.12, 750, 0.3, 2666.67, 0.0],
+    ]
+    for i in range(5):
+        st.session_state.relays.append(
+            {
+                "idmt": False,
+                "pick": str(defaults[i][0]),
+                "tms": str(defaults[i][1]),
+                "dt1": False,
+                "p1": str(defaults[i][2]),
+                "t1": str(defaults[i][3]),
+                "dt2": False,
+                "p2": str(defaults[i][4]),
+                "t2": str(defaults[i][5]),
+                "curve": "Standard Inverse",
+            }
+        )
+
+    st.session_state.last_plot = None   # (fig, report_text, trip_times, flc, isc, fault_used)
+    st.session_state.tcc_inited = True
+
+
+def new_project_reset():
+    st.session_state.t_mva = ""
+    st.session_state.t_hv = ""
+    st.session_state.t_lv = ""
+    st.session_state.t_z = ""
+    st.session_state.fault_a = ""
+    for i in range(5):
+        r = st.session_state.relays[i]
+        r["idmt"] = False
+        r["dt1"] = False
+        r["dt2"] = False
+        r["pick"] = ""
+        r["tms"] = ""
+        r["p1"] = ""
+        r["t1"] = ""
+        r["p2"] = ""
+        r["t2"] = ""
+        r["curve"] = "Standard Inverse"
+    st.session_state.last_plot = None
+
+
+def prefill_defaults():
+    st.session_state.t_mva = "16.6"
+    st.session_state.t_hv = "33"
+    st.session_state.t_lv = "11"
+    st.session_state.t_z = "10"
+    st.session_state.fault_a = "7900"
+
+    defaults = [
+        [220, 0.025, 600, 0.0, 0, 0.0],
+        [275, 0.025, 750, 0.0, 0, 0.0],
+        [330, 0.025, 900, 0.0, 0, 0.0],
+        [825, 0.07, 2250, 0.15, 8000, 0.0],
+        [275, 0.12, 750, 0.3, 2666.67, 0.0],
+    ]
+    for i in range(5):
+        r = st.session_state.relays[i]
+        r["pick"] = str(defaults[i][0])
+        r["tms"] = str(defaults[i][1])
+        r["p1"] = str(defaults[i][2])
+        r["t1"] = str(defaults[i][3])
+        r["p2"] = str(defaults[i][4])
+        r["t2"] = str(defaults[i][5])
+
+
+_init_state()
+
+# =========================
+# LOGIC (same as Tkinter)
+# =========================
+def iec_curve(I, Ip, TMS, curve):
     if I <= Ip:
         return np.nan
     curves = {
@@ -75,67 +198,29 @@ def iec_curve(I: float, Ip: float, TMS: float, curve: str) -> float:
     M = I / Ip
     return TMS * (k / ((M ** alpha) - 1))
 
-def transformer_calculations(MVA: float, LV: float, HV: float, Z: float) -> Tuple[float, float, float]:
-    flc_lv = (MVA * 1000) / (np.sqrt(3) * LV)
-    isc_lv = flc_lv / (Z / 100)
-    hv_factor = HV / LV
-    return flc_lv, isc_lv, hv_factor
 
-def safe_float(x) -> Optional[float]:
+def transformer_calculations():
     try:
-        s = str(x).strip()
-        if s == "":
-            return None
-        return float(s)
+        MVA = float(st.session_state.t_mva)
+        LV = float(st.session_state.t_lv)
+        HV = float(st.session_state.t_hv)
+        Z = float(st.session_state.t_z)
+        FLC_LV = (MVA * 1000) / (np.sqrt(3) * LV)
+        Isc_LV = FLC_LV / (Z / 100)
+        HV_factor = HV / LV
+        return FLC_LV, Isc_LV, HV_factor
     except Exception:
-        return None
+        return None, None, 1
 
-@dataclass
-class RelayRow:
-    idmt: bool
-    pickup: float
-    tms: float
-    dt1: bool
-    dt1_pickup: float
-    dt1_time: float
-    dt2: bool
-    dt2_pickup: float
-    dt2_time: float
-    curve: str
 
-def prefill_state():
-    return {
-        "mva": "16.6",
-        "hv": "33",
-        "lv": "11",
-        "z": "10",
-        "fault": "7900",
-        "relays": [
-            {"idmt": True, "pickup": 220, "tms": 0.025, "dt1": True, "dt1_pickup": 600, "dt1_time": 0.0, "dt2": True, "dt2_pickup": 0, "dt2_time": 0.0, "curve": "Standard Inverse"},
-            {"idmt": True, "pickup": 275, "tms": 0.025, "dt1": True, "dt1_pickup": 750, "dt1_time": 0.0, "dt2": True, "dt2_pickup": 0, "dt2_time": 0.0, "curve": "Standard Inverse"},
-            {"idmt": True, "pickup": 330, "tms": 0.025, "dt1": True, "dt1_pickup": 900, "dt1_time": 0.0, "dt2": True, "dt2_pickup": 0, "dt2_time": 0.0, "curve": "Standard Inverse"},
-            {"idmt": True, "pickup": 825, "tms": 0.07,  "dt1": True, "dt1_pickup": 2250,"dt1_time": 0.15,"dt2": True, "dt2_pickup": 8000,"dt2_time": 0.0, "curve": "Standard Inverse"},
-            {"idmt": True, "pickup": 275, "tms": 0.12,  "dt1": True, "dt1_pickup": 750, "dt1_time": 0.3, "dt2": True, "dt2_pickup": 2666.67,"dt2_time": 0.0, "curve": "Standard Inverse"},
-        ],
-    }
-
-def new_project_state():
-    return {
-        "mva": "", "hv": "", "lv": "", "z": "", "fault": "",
-        "relays": [
-            {"idmt": False, "pickup": 0.0, "tms": 0.0, "dt1": False, "dt1_pickup": 0.0, "dt1_time": 0.0,
-             "dt2": False, "dt2_pickup": 0.0, "dt2_time": 0.0, "curve": "Standard Inverse"}
-            for _ in range(5)
-        ],
-    }
-
-def build_report(trip_times: Dict[str, float], flc_lv: float, isc_lv: float, fault_used: Optional[float]) -> str:
+def build_report(trip_times, FLC_LV, Isc_LV, fault_current):
     lines = []
     lines.append("Coordination Report")
     lines.append("=" * 20)
-    lines.append(f"LV FLC: {flc_lv:.3f} A | LV Isc: {isc_lv:.3f} A")
-    if fault_used is not None:
-        lines.append(f"Fault Current: {fault_used:.3f} A")
+    if FLC_LV:
+        lines.append(f"LV FLC: {FLC_LV:.3f} A | LV Isc: {Isc_LV:.3f} A")
+    if fault_current:
+        lines.append(f"Fault Current: {fault_current:.3f} A")
     lines.append("")
     for q in sorted(trip_times.keys()):
         lines.append(f"{q} Trip: {trip_times[q]:.3f} s")
@@ -147,236 +232,369 @@ def build_report(trip_times: Dict[str, float], flc_lv: float, isc_lv: float, fau
         ("Q1", "Q5", CTI_Q1_Q5), ("Q2", "Q5", CTI_Q1_Q5), ("Q3", "Q5", CTI_Q1_Q5),
         ("Q4", "Q5", CTI_Q4_Q5),
     ]
+
+    # HTML-ish report for Streamlit (to keep green/red)
+    html_lines = []
+    html_lines.append("Coordination Report\n" + "=" * 20 + "\n")
+    if FLC_LV:
+        html_lines.append(f"LV FLC: {FLC_LV:.3f} A | LV Isc: {Isc_LV:.3f} A\n")
+    if fault_current:
+        html_lines.append(f"Fault Current: {fault_current:.3f} A\n\n")
+    for q in sorted(trip_times.keys()):
+        html_lines.append(f"{q} Trip: {trip_times[q]:.3f} s\n")
+    html_lines.append("\nCoordination Results:\n")
+
+    for d, u, c in checks:
+        if d in trip_times and u in trip_times:
+            m = trip_times[u] - trip_times[d]
+            ok = m >= c
+            tag = "ok" if ok else "bad"
+            html_lines.append(f"{d}->{u}: {m:.3f}s <span class='{tag}'>{'OK' if ok else 'NOT OK'}</span>\n")
+
+    # plain text (for PDF/CSV)
     for d, u, c in checks:
         if d in trip_times and u in trip_times:
             m = trip_times[u] - trip_times[d]
             lines.append(f"{d}->{u}: {m:.3f}s {'OK' if m >= c else 'NOT OK'}")
-    return "\n".join(lines)
 
-def plot_curves(relays: List[RelayRow], mva: float, hv: float, lv: float, z: float, fault_current: Optional[float]):
-    currents = np.logspace(1, 5, 800)
-    flc_lv, isc_lv, hv_factor = transformer_calculations(mva, lv, hv, z)
+    return "\n".join(lines), "".join(html_lines)
 
-    fault_used = fault_current
-    if fault_used is not None and fault_used > isc_lv:
-        fault_used = isc_lv  # same cap behavior
 
+def plot_curves_and_report():
     fig = plt.figure(figsize=(10, 6))
     ax = fig.add_subplot(111)
+
     ax.set_title("Time-Current Characteristics", fontsize=14, fontweight="bold")
     ax.set_xscale("log")
     ax.set_yscale("log")
-    ax.set_xlabel("Current (A)")
-    ax.set_ylabel("Time (s)")
+    ax.set_xlabel("Current (A)", fontsize=12)
+    ax.set_ylabel("Time (s)", fontsize=12)
     ax.grid(True, which="both", linestyle="--", alpha=0.7)
 
+    currents = np.logspace(1, 5, 800)
+    FLC_LV, Isc_LV, HV_factor = transformer_calculations()
+
+    # fault current
+    try:
+        fault_current = float(st.session_state.fault_a)
+    except Exception:
+        fault_current = None
+
+    # clamp fault to Isc (same warning logic; Streamlit shows warning)
+    fault_used = fault_current
+    if Isc_LV and fault_current and fault_current > Isc_LV:
+        st.warning("Warning: Fault current exceeds LV short circuit current. It has been limited to LV Isc.")
+        fault_used = Isc_LV
+
+    trip_times = {}
     colors = ["blue", "green", "red", "purple", "orange"]
-    trip_times: Dict[str, float] = {}
 
     for i in range(5):
-        r = relays[i]
-        scale = hv_factor if i == 4 else 1.0
+        r = st.session_state.relays[i]
+        # required numeric fields
+        try:
+            Ip = float(r["pick"])
+            TMS = float(r["tms"])
+            curve = r["curve"]
+        except Exception:
+            continue
 
-        merged = []
+        current_scaling = HV_factor if i == 4 else 1
+        merged_curve = []
+
         for I in currents:
-            Is = I / scale
+            I_scaled = I / current_scaling
             times = []
-            if r.idmt:
-                t = iec_curve(Is, r.pickup, r.tms, r.curve)
-                if not np.isnan(t):
-                    times.append(t)
-            if r.dt1 and Is >= r.dt1_pickup:
-                times.append(r.dt1_time)
-            if i >= 3 and r.dt2 and Is >= r.dt2_pickup:
-                times.append(r.dt2_time)
-            merged.append(min(times) if times else np.nan)
 
-        merged = np.array(merged)
-        ax.plot(currents, merged, color=colors[i], linewidth=2.5, label=f"Q{i+1}")
+            # IDMT
+            if r["idmt"]:
+                t_idmt = iec_curve(I_scaled, Ip, TMS, curve)
+                if not np.isnan(t_idmt):
+                    times.append(t_idmt)
 
-        if fault_used is not None:
-            Isf = fault_used / scale
-            cand = []
+            # DT1
+            if r["dt1"]:
+                try:
+                    if I_scaled >= float(r["p1"]):
+                        times.append(float(r["t1"]))
+                except Exception:
+                    pass
 
-            if r.idmt:
-                tf = iec_curve(Isf, r.pickup, r.tms, r.curve)
-                if not np.isnan(tf):
-                    cand.append(tf)
-            if r.dt1 and Isf >= r.dt1_pickup:
-                cand.append(r.dt1_time)
-            if i >= 3 and r.dt2 and Isf >= r.dt2_pickup:
-                cand.append(r.dt2_time)
+            # DT2 (only for Q4/Q5 in your Tkinter: i >= 3)
+            if i >= 3 and r["dt2"]:
+                try:
+                    if I_scaled >= float(r["p2"]):
+                        times.append(float(r["t2"]))
+                except Exception:
+                    pass
 
-            if cand:
-                t_res = float(min(cand))
-                trip_times[f"Q{i+1}"] = round(t_res, 3)
+            merged_curve.append(min(times) if times else np.nan)
+
+        merged_curve = np.array(merged_curve)
+        ax.plot(currents, merged_curve, color=colors[i], linewidth=2.5, label=f"Q{i+1}")
+
+        # intersection at fault
+        if fault_used:
+            I_fault_scaled = fault_used / current_scaling
+            intersection_times = []
+
+            if r["idmt"]:
+                t_f = iec_curve(I_fault_scaled, Ip, TMS, curve)
+                if not np.isnan(t_f):
+                    intersection_times.append(t_f)
+
+            if r["dt1"]:
+                try:
+                    if I_fault_scaled >= float(r["p1"]):
+                        intersection_times.append(float(r["t1"]))
+                except Exception:
+                    pass
+
+            if i >= 3 and r["dt2"]:
+                try:
+                    if I_fault_scaled >= float(r["p2"]):
+                        intersection_times.append(float(r["t2"]))
+                except Exception:
+                    pass
+
+            if intersection_times:
+                t_res = min(intersection_times)
+                trip_times[f"Q{i+1}"] = round(float(t_res), 3)
                 ax.plot(fault_used, t_res, "o", color=colors[i])
                 ax.text(fault_used, t_res, f"{t_res:.3f}s", fontsize=9)
 
-    if fault_used is not None:
+    if fault_used:
         ax.axvline(fault_used, linestyle="dotted", color="black", linewidth=2, label="Fault Level")
 
     ax.legend()
-    fig.tight_layout()
-    return fig, trip_times, flc_lv, isc_lv, fault_used
+
+    report_plain, report_html = build_report(trip_times, FLC_LV, Isc_LV, fault_used)
+    return fig, report_plain, report_html, trip_times, FLC_LV, Isc_LV, fault_used
 
 
-# ------------------- HEADER (Tkinter top region) -------------------
-top = st.columns([6, 1.4], gap="small")
-with top[0]:
-    st.markdown("<div class='tk_header'>NEA Protection Coordination Tool (TCC)</div>", unsafe_allow_html=True)
-with top[1]:
-    if os.path.exists(LOGO_PATH):
-        st.image(LOGO_PATH, width=95)
+def make_pdf_bytes(fig, report_plain):
+    # Create PDF in memory (no file dialog in Streamlit)
+    buf = io.BytesIO()
+    with PdfPages(buf) as pdf:
+        pdf.savefig(fig)
 
-# Session state
-if "tcc_state" not in st.session_state:
-    st.session_state.tcc_state = prefill_state()
-state = st.session_state.tcc_state
-
-# "Menu" row like Tkinter File menu
-m1, m2, m3, m4 = st.columns([1.1, 1.1, 1.4, 5.4], gap="small")
-with m1:
-    if st.button("New Project", use_container_width=True):
-        st.session_state.tcc_state = new_project_state()
-        st.rerun()
-with m2:
-    if st.button("Prefill Data", use_container_width=True):
-        st.session_state.tcc_state = prefill_state()
-        st.rerun()
-with m3:
-    run_plot = st.button("Plot Coordination", type="primary", use_container_width=True)
-
-st.markdown("<hr style='margin:6px 0 10px 0;'>", unsafe_allow_html=True)
-
-# ------------------- MAIN WINDOW (Left controls + Right plot/report) -------------------
-left, right = st.columns([1.05, 1.55], gap="small")
-
-# ---------- LEFT PANEL ----------
-with left:
-    st.markdown("<div class='tk_left'>", unsafe_allow_html=True)
-
-    st.markdown("<div class='tk_small'>Transformer Data</div>", unsafe_allow_html=True)
-    state["mva"] = st.text_input("Rating (MVA)", value=state["mva"])
-    state["hv"]  = st.text_input("HV (kV)", value=state["hv"])
-    state["lv"]  = st.text_input("LV (kV)", value=state["lv"])
-    state["z"]   = st.text_input("Impedance (%)", value=state["z"])
-
-    mva = safe_float(state["mva"])
-    hv  = safe_float(state["hv"])
-    lv  = safe_float(state["lv"])
-    z   = safe_float(state["z"])
-
-    flc_lv = isc_lv = None
-    if None not in (mva, hv, lv, z):
-        flc_lv, isc_lv, _ = transformer_calculations(mva, lv, hv, z)
-        st.markdown(f"**FLC (LV) = {flc_lv:.3f} A**")
-        st.markdown(f"**Isc (LV) = {isc_lv:.3f} A**")
-    else:
-        st.markdown("**FLC (LV) = -**")
-        st.markdown("**Isc (LV) = -**")
-
-    st.markdown("<div class='tk_small' style='margin-top:10px;'>Fault Data</div>", unsafe_allow_html=True)
-    state["fault"] = st.text_input("Fault (A)", value=state["fault"])
-    fault = safe_float(state["fault"])
-
-    st.markdown("<div class='tk_small' style='margin-top:10px;'>Relay Settings</div>", unsafe_allow_html=True)
-
-    headers = ["Relay","IDMT","Pick","TMS","DT1","P1","T1","DT2","P2","T2","Curve"]
-    hc = st.columns([0.6,0.55,0.75,0.65,0.55,0.75,0.65,0.55,0.8,0.65,1.3], gap="small")
-    for i,h in enumerate(headers):
-        hc[i].markdown(f"**{h}**")
-
-    curves = ["Standard Inverse", "Very Inverse", "Extremely Inverse"]
-    relay_rows: List[RelayRow] = []
-
-    for i in range(5):
-        r = state["relays"][i]
-        c = st.columns([0.6,0.55,0.75,0.65,0.55,0.75,0.65,0.55,0.8,0.65,1.3], gap="small")
-
-        c[0].write(f"Q{i+1}")
-        r["idmt"] = c[1].checkbox("", value=bool(r["idmt"]), key=f"idmt_{i}")
-        r["pickup"] = c[2].number_input("", value=float(r["pickup"]), key=f"pick_{i}")
-        r["tms"] = c[3].number_input("", value=float(r["tms"]), step=0.001, format="%.3f", key=f"tms_{i}")
-        r["dt1"] = c[4].checkbox("", value=bool(r["dt1"]), key=f"dt1_{i}")
-        r["dt1_pickup"] = c[5].number_input("", value=float(r["dt1_pickup"]), key=f"p1_{i}")
-        r["dt1_time"] = c[6].number_input("", value=float(r["dt1_time"]), step=0.01, format="%.3f", key=f"t1_{i}")
-        r["dt2"] = c[7].checkbox("", value=bool(r["dt2"]), key=f"dt2_{i}")
-        r["dt2_pickup"] = c[8].number_input("", value=float(r["dt2_pickup"]), key=f"p2_{i}")
-        r["dt2_time"] = c[9].number_input("", value=float(r["dt2_time"]), step=0.01, format="%.3f", key=f"t2_{i}")
-        r["curve"] = c[10].selectbox("", curves, index=curves.index(r["curve"]) if r["curve"] in curves else 0, key=f"curve_{i}")
-
-        relay_rows.append(
-            RelayRow(
-                idmt=bool(r["idmt"]),
-                pickup=float(r["pickup"]),
-                tms=float(r["tms"]),
-                dt1=bool(r["dt1"]),
-                dt1_pickup=float(r["dt1_pickup"]),
-                dt1_time=float(r["dt1_time"]),
-                dt2=bool(r["dt2"]),
-                dt2_pickup=float(r["dt2_pickup"]),
-                dt2_time=float(r["dt2_time"]),
-                curve=str(r["curve"]),
-            )
+        fig_rep, ax_rep = plt.subplots(figsize=(11, 8.5))
+        ax_rep.axis("off")
+        ax_rep.text(
+            0.5, 0.95, "Relay Settings & Coordination Report",
+            fontsize=16, weight="bold", ha="center"
         )
 
-    if os.path.exists(SLD_PATH):
-        st.image(SLD_PATH, width=250)
+        headers = ["Relay", "IDMT", "Pick", "TMS", "DT1", "P1", "T1", "DT2", "P2", "T2", "Curve"]
+        rows = []
+        for i in range(5):
+            r = st.session_state.relays[i]
+            rows.append([
+                f"Q{i+1}",
+                "ON" if r["idmt"] else "OFF",
+                f"{float(r['pick']):.3f}" if r["pick"] else "",
+                f"{float(r['tms']):.3f}" if r["tms"] else "",
+                "ON" if r["dt1"] else "OFF",
+                f"{float(r['p1']):.3f}" if r["p1"] else "",
+                f"{float(r['t1']):.3f}" if r["t1"] else "",
+                "ON" if r["dt2"] else "OFF",
+                f"{float(r['p2']):.3f}" if r["p2"] else "",
+                f"{float(r['t2']):.3f}" if r["t2"] else "",
+                r["curve"],
+            ])
 
-    st.markdown("**Protection and Automation Division, GOD**")
-    st.markdown("</div>", unsafe_allow_html=True)
+        table = ax_rep.table(
+            cellText=rows,
+            colLabels=headers,
+            loc="upper center",
+            cellLoc="center",
+            colLoc="center",
+        )
+        table.auto_set_font_size(False)
+        table.set_fontsize(9)
+        table.scale(1, 1.3)
 
-# ---------- RIGHT PANEL ----------
-with right:
-    st.markdown("<div class='tk_right'>", unsafe_allow_html=True)
-    st.markdown("<div class='tk_small'>Plot + Report (same as right panel in Tkinter)</div>", unsafe_allow_html=True)
-
-    if not run_plot:
-        st.info("Click **Plot Coordination** to display the graph and report (same workflow as Tkinter).")
-        st.markdown("</div>", unsafe_allow_html=True)
-        st.stop()
-
-    if None in (mva, hv, lv, z):
-        st.error("Transformer inputs invalid. Please enter numeric values.")
-        st.markdown("</div>", unsafe_allow_html=True)
-        st.stop()
-
-    flc, isc, _ = transformer_calculations(mva, lv, hv, z)
-    if fault is not None and fault > isc:
-        st.warning("Fault current exceeds LV short circuit current. It will be capped to Isc (same as Tkinter).")
-
-    fig, trip_times, flc_lv2, isc_lv2, fault_used = plot_curves(relay_rows, mva, hv, lv, z, fault)
-    st.pyplot(fig, clear_figure=True)
-
-    report = build_report(trip_times, flc_lv2, isc_lv2, fault_used)
-    st.text_area("Coordination Report", value=report, height=250)
-
-    st.markdown("<hr style='margin:8px 0 8px 0;'>", unsafe_allow_html=True)
-    st.markdown("<div class='tk_small'>Save / Export</div>", unsafe_allow_html=True)
-
-    # PDF save (plot + report page)
-    pdf_buf = io.BytesIO()
-    with PdfPages(pdf_buf) as pdf:
-        pdf.savefig(fig)
-        fig_rep, ax = plt.subplots(figsize=(11, 8.5))
-        ax.axis("off")
-        ax.text(0.5, 0.95, "Relay Settings & Coordination Report", fontsize=16, weight="bold", ha="center")
-        ax.text(0.05, 0.90, report, fontsize=10, family="monospace", va="top")
+        # report text
+        ax_rep.text(0.02, 0.25, report_plain, fontsize=10, family="monospace", va="top")
         pdf.savefig(fig_rep)
         plt.close(fig_rep)
-    pdf_buf.seek(0)
 
-    st.download_button("Save Report (PDF)", data=pdf_buf.getvalue(), file_name="NEA_TCC_Report.pdf", mime="application/pdf")
+    buf.seek(0)
+    return buf.getvalue()
 
-    # CSV export (Excel)
-    csv_buf = io.StringIO()
-    w = csv.writer(csv_buf)
-    w.writerow(["Relay","IDMT","Pickup","TMS","DT1","P1","T1","DT2","P2","T2","Curve"])
-    for i, rr in enumerate(relay_rows):
-        w.writerow([f"Q{i+1}", int(rr.idmt), rr.pickup, rr.tms, int(rr.dt1), rr.dt1_pickup, rr.dt1_time,
-                    int(rr.dt2), rr.dt2_pickup, rr.dt2_time, rr.curve])
-    st.download_button("Export to Excel (CSV)", data=csv_buf.getvalue().encode("utf-8"),
-                       file_name="NEA_TCC_Export.csv", mime="text/csv")
 
+def make_csv_bytes():
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+
+    writer.writerow(["NEA PROTECTION TOOL REPORT"])
+    writer.writerow([])
+    writer.writerow(["--- Transformer Data ---"])
+    writer.writerow(["Rating (MVA)", st.session_state.t_mva])
+    writer.writerow(["HV Voltage (kV)", st.session_state.t_hv])
+    writer.writerow(["LV Voltage (kV)", st.session_state.t_lv])
+    writer.writerow(["Impedance (%)", st.session_state.t_z])
+
+    flc, isc, _ = transformer_calculations()
+    writer.writerow(["FLC (LV)", f"{flc:.3f} A" if flc else "-"])
+    writer.writerow(["Isc (LV)", f"{isc:.3f} A" if isc else "-"])
+    writer.writerow([])
+    writer.writerow(["--- Relay Settings ---"])
+    writer.writerow(["Relay", "IDMT", "Pickup", "TMS", "DT1", "P1", "T1", "DT2", "P2", "T2", "Curve"])
+
+    for i in range(5):
+        r = st.session_state.relays[i]
+        writer.writerow([
+            f"Q{i+1}",
+            1 if r["idmt"] else 0,
+            r["pick"],
+            r["tms"],
+            1 if r["dt1"] else 0,
+            r["p1"],
+            r["t1"],
+            1 if r["dt2"] else 0,
+            r["p2"],
+            r["t2"],
+            r["curve"],
+        ])
+
+    return buf.getvalue().encode("utf-8")
+
+
+# =========================
+# "FILE MENU" (Tkinter-like)
+# =========================
+menu_c1, menu_c2, menu_c3, menu_c4, menu_c5, menu_c6 = st.columns([1.8, 1.8, 1.8, 2.2, 2.2, 6])
+with menu_c1:
+    if st.button("New Project (Reset All)", use_container_width=True):
+        new_project_reset()
+        st.rerun()
+with menu_c2:
+    if st.button("Prefill Defaults", use_container_width=True):
+        prefill_defaults()
+        st.rerun()
+with menu_c3:
+    plot_clicked = st.button("Plot Coordination", type="primary", use_container_width=True)
+with menu_c4:
+    save_pdf_clicked = st.button("Save Report (PDF)", use_container_width=True)
+with menu_c5:
+    export_csv_clicked = st.button("Export to Excel (CSV)", use_container_width=True)
+
+st.write("")
+
+# =========================
+# MAIN LAYOUT (Tkinter: left gray, right white)
+# =========================
+left_col, right_col = st.columns([1.05, 2.2], gap="large")
+
+# -------- LEFT PANEL --------
+with left_col:
+    st.markdown("<div class='leftPanel'>", unsafe_allow_html=True)
+
+    # Transformer Data + Logo (same line)
+    topL, topR = st.columns([3.2, 1])
+    with topL:
+        st.markdown("<div class='lf'><div class='lfTitle'>Transformer Data</div>", unsafe_allow_html=True)
+
+        st.session_state.t_mva = st.text_input("Rating (MVA)", value=st.session_state.t_mva)
+        st.session_state.t_hv = st.text_input("HV (kV)", value=st.session_state.t_hv)
+        st.session_state.t_lv = st.text_input("LV (kV)", value=st.session_state.t_lv)
+        st.session_state.t_z = st.text_input("Impedance (%)", value=st.session_state.t_z)
+
+        flc, isc, _ = transformer_calculations()
+        st.markdown(f"<b>FLC (LV) = {flc:.3f} A</b>" if flc else "<b>FLC (LV) = -</b>", unsafe_allow_html=True)
+        st.markdown(f"<b>Isc (LV) = {isc:.3f} A</b>" if isc else "<b>Isc (LV) = -</b>", unsafe_allow_html=True)
+
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    with topR:
+        if os.path.exists(LOGO_PATH):
+            st.image(LOGO_PATH, width=110)
+
+    # Fault Data
+    st.markdown("<div class='lf'><div class='lfTitle'>Fault Data</div>", unsafe_allow_html=True)
+    st.session_state.fault_a = st.text_input("Fault (A)", value=st.session_state.fault_a)
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    # Relay Settings (grid like Tkinter)
+    st.markdown("<div class='lf'><div class='lfTitle'>Relay Settings</div>", unsafe_allow_html=True)
+
+    hdr = st.columns([0.9, 0.9, 1.0, 1.0, 0.9, 1.0, 1.0, 0.9, 1.2, 1.0, 1.6])
+    headers = ["Relay", "IDMT", "Pick", "TMS", "DT1", "P1", "T1", "DT2", "P2", "T2", "Curve"]
+    for c, h in zip(hdr, headers):
+        c.markdown(f"**{h}**")
+
+    for i in range(5):
+        r = st.session_state.relays[i]
+        row = st.columns([0.9, 0.9, 1.0, 1.0, 0.9, 1.0, 1.0, 0.9, 1.2, 1.0, 1.6])
+
+        row[0].markdown(f"**Q{i+1}**")
+        r["idmt"] = row[1].checkbox("", value=r["idmt"], key=f"idmt_{i}")
+        r["pick"] = row[2].text_input("", value=r["pick"], key=f"pick_{i}")
+        r["tms"] = row[3].text_input("", value=r["tms"], key=f"tms_{i}")
+        r["dt1"] = row[4].checkbox("", value=r["dt1"], key=f"dt1_{i}")
+        r["p1"] = row[5].text_input("", value=r["p1"], key=f"p1_{i}")
+        r["t1"] = row[6].text_input("", value=r["t1"], key=f"t1_{i}")
+        r["dt2"] = row[7].checkbox("", value=r["dt2"], key=f"dt2_{i}")
+        r["p2"] = row[8].text_input("", value=r["p2"], key=f"p2_{i}")
+        r["t2"] = row[9].text_input("", value=r["t2"], key=f"t2_{i}")
+        r["curve"] = row[10].selectbox("", CURVES, index=CURVES.index(r["curve"]), key=f"curve_{i}")
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    # SLD image (same as Tkinter left panel)
+    if os.path.exists(SLD_PATH):
+        st.image(SLD_PATH, width=240)
+
+    st.markdown(
+        "<div style='color:red;font-weight:800;margin-top:6px;'>Protection and Automation Division, GOD</div>",
+        unsafe_allow_html=True,
+    )
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+# -------- RIGHT PANEL --------
+with right_col:
+    st.markdown("<div class='rightPanel'>", unsafe_allow_html=True)
+
+    st.markdown("<div class='lf'><div class='lfTitle'>Plot + Report (same as right panel in Tkinter)</div>", unsafe_allow_html=True)
+    st.info("Click Plot Coordination to display the graph and report (same workflow as Tkinter).")
+
+    # Plot on click
+    if plot_clicked:
+        fig, report_plain, report_html, trip_times, flc, isc, fault_used = plot_curves_and_report()
+        st.session_state.last_plot = (fig, report_plain, report_html, trip_times, flc, isc, fault_used)
+
+    if st.session_state.last_plot is not None:
+        fig, report_plain, report_html, trip_times, flc, isc, fault_used = st.session_state.last_plot
+        st.pyplot(fig, use_container_width=True)
+
+        st.markdown(f"<div class='reportBox'>{report_html}</div>", unsafe_allow_html=True)
+
+        # downloads
+        if save_pdf_clicked:
+            pdf_bytes = make_pdf_bytes(fig, report_plain)
+            st.download_button(
+                "Download PDF",
+                data=pdf_bytes,
+                file_name="NEA_TCC_Report.pdf",
+                mime="application/pdf",
+                use_container_width=True,
+            )
+
+        if export_csv_clicked:
+            csv_bytes = make_csv_bytes()
+            st.download_button(
+                "Download CSV",
+                data=csv_bytes,
+                file_name="NEA_TCC_Report.csv",
+                mime="text/csv",
+                use_container_width=True,
+            )
+    else:
+        # no plot yet; allow export buttons but show guidance
+        if save_pdf_clicked or export_csv_clicked:
+            st.warning("Please click Plot Coordination first (same as Tkinter) so the report/plot are generated.")
+
+    st.markdown("</div>", unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
