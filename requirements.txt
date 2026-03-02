@@ -1,4 +1,6 @@
 streamlit>=1.31.0
 numpy
 matplotlib
-fpdf
+pandas
+pillow
+fpdf2
