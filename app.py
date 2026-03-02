@@ -31,5 +31,6 @@ with colB:
     if st.button("Working", use_container_width=True):
         st.switch_page("pages/5_Working.py")
 
-st.info("On the web, tools open as pages (instead of Tkinter pop-up windows).")
+st.info("")
+
 
