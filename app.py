@@ -8,62 +8,76 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-# ------------------ GLOBAL CSS ------------------
+# -------------------- CSS --------------------
 st.markdown(
     """
     <style>
-    /* Hide Streamlit sidebar */
+    /* Hide Streamlit sidebar completely */
     [data-testid="stSidebar"] {display:none !important;}
     [data-testid="stSidebarNav"] {display:none !important;}
 
-    /* Overall spacing */
-    .block-container {padding-top: 1.2rem; padding-bottom: 1rem; max-width: 1200px;}
+    /* Make page spacing nicer + move content down a bit */
+    .block-container {
+        padding-top: 1.8rem;
+        padding-bottom: 1.0rem;
+        max-width: 1200px;
+    }
 
-    /* Remove default hr if any */
+    /* Remove any horizontal rule lines */
     hr {display:none !important;}
 
-    /* Header spacing */
-    .nea-header-wrap{
-        margin-top: 10px;
-        margin-bottom: 14px;
+    /* Header wrapper */
+    .nea-header {
+        margin-top: 8px;
+        margin-bottom: 18px;
     }
 
     /* Card container */
     .nea-card{
         border: 1px solid rgba(0,0,0,0.08);
         border-radius: 18px;
-        padding: 18px;
+        padding: 18px 18px 22px 18px;
         background: #ffffff;
         box-shadow: 0 10px 30px rgba(0,0,0,0.06);
     }
 
-    /* Tool tiles grid */
+    /* Tiles grid */
     .tiles{
         display: grid;
         grid-template-columns: 1fr 1fr;
         gap: 18px;
-        margin-top: 14px;
+        margin-top: 16px;
     }
 
-    /* A tool tile */
+    /* Tile base */
     .tile{
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        height: 92px;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        height: 96px;
         border-radius: 18px;
-        color: white;
-        font-size: 20px;
-        font-weight: 900;
+
+        /* FORCE WHITE text always */
+        color: #ffffff !important;
         text-decoration: none !important;
-        box-shadow: 0 14px 30px rgba(2,132,199,0.20);
+        font-size: 22px;
+        font-weight: 900;
+        letter-spacing: 0.2px;
+
         border: 1px solid rgba(255,255,255,0.18);
+        box-shadow: 0 16px 34px rgba(2,132,199,0.22);
         transition: transform 120ms ease, box-shadow 120ms ease, filter 120ms ease;
         user-select: none;
     }
+
+    /* Also force white for visited/hover/active states (links sometimes become dark) */
+    .tile:visited { color:#ffffff !important; }
+    .tile:hover   { color:#ffffff !important; text-decoration:none !important; }
+    .tile:active  { color:#ffffff !important; }
+
     .tile:hover{
         transform: translateY(-2px);
-        box-shadow: 0 18px 40px rgba(2,132,199,0.30);
+        box-shadow: 0 20px 44px rgba(2,132,199,0.32);
         filter: brightness(1.03);
     }
 
@@ -73,25 +87,17 @@ st.markdown(
     .b3{ background: linear-gradient(135deg, #075985 0%, #0284c7 55%, #38bdf8 100%); }
     .b4{ background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 55%, #0b5bd3 100%); }
 
-    /* Emoji spacing */
-    .tile span{
-        display:inline-flex;
-        gap: 10px;
-        align-items:center;
-    }
-
-    /* Make it mobile-friendly */
+    /* Mobile */
     @media (max-width: 900px){
         .tiles{ grid-template-columns: 1fr; }
-        .tile{ height: 84px; font-size: 18px; }
+        .tile{ height: 86px; font-size: 20px; }
     }
     </style>
     """,
-    unsafe_allow_html=True
+    unsafe_allow_html=True,
 )
 
-# ------------------ NAV HANDLER ------------------
-# We navigate using query param ?go=tcc / ocef / theory / working
+# -------------------- NAV (query param) --------------------
 qp = st.query_params
 go = qp.get("go", None)
 
@@ -108,62 +114,69 @@ elif go == "working":
     st.query_params.clear()
     st.switch_page("pages/5_Working.py")
 
-# ------------------ LOGO (IMPORTANT NOTE) ------------------
-# If your logo file itself is cropped, Streamlit cannot "fix" it.
-# Replace logo.jpg in GitHub with the FULL original logo image for perfect result.
+# -------------------- LOGO (NO CROP GUARANTEE) --------------------
+# Your repo has logo.jpg in root
 logo_path = Path(__file__).parent / "logo.jpg"
 
-def load_logo(path: Path, target_w: int = 150) -> Image.Image | None:
+def load_logo_no_crop(path: Path, target_px: int = 170) -> Image.Image | None:
+    """
+    Ensures the logo is ALWAYS fully visible:
+    - adds padding around it
+    - uses contain() (never crops)
+    - returns an RGBA image safe for st.image
+    """
     if not path.exists():
         return None
+
     img = Image.open(path).convert("RGBA")
 
-    # Add padding around logo so it never "touches" the edges visually
-    img = ImageOps.expand(img, border=10, fill=(255, 255, 255, 255))
+    # Add generous padding so edges never appear clipped
+    img = ImageOps.expand(img, border=18, fill=(255, 255, 255, 255))
 
-    # Keep full image visible (no cropping)
-    img = ImageOps.contain(img, (target_w, target_w))
+    # Resize to fit inside a square WITHOUT cropping
+    img = ImageOps.contain(img, (target_px, target_px))
 
     return img
 
-# ------------------ HEADER ------------------
-st.markdown("<div class='nea-header-wrap'>", unsafe_allow_html=True)
+# -------------------- HEADER (moved down) --------------------
+st.markdown("<div class='nea-header'>", unsafe_allow_html=True)
 
-c1, c2 = st.columns([1.1, 5.0], vertical_alignment="center")
+c1, c2 = st.columns([1.2, 5.0], vertical_alignment="center")
+
 with c1:
-    logo = load_logo(logo_path, target_w=150)
+    logo = load_logo_no_crop(logo_path, target_px=170)
     if logo is not None:
-        st.image(logo, width=150)
+        # Fixed width prevents Streamlit responsive scaling that can clip in some layouts
+        st.image(logo, width=170)
     else:
-        st.warning("logo.jpg not found in repo root")
+        st.error("logo.jpg not found in repo root.")
 
 with c2:
     st.markdown(
-        "<h1 style='margin:0; padding:0; font-size:46px; font-weight:900;'>NEA Master Protection Tool</h1>",
-        unsafe_allow_html=True
+        "<h1 style='margin:0; font-size:46px; font-weight:900;'>NEA Master Protection Tool</h1>",
+        unsafe_allow_html=True,
     )
     st.markdown(
-        "<div style='margin-top:6px; color:#4b5563; font-weight:700; font-size:16px;'>Select a tool below. (Navigation is here)</div>",
-        unsafe_allow_html=True
+        "<div style='margin-top:8px; color:#4b5563; font-weight:800; font-size:16px;'>Select a tool below. (Navigation is here)</div>",
+        unsafe_allow_html=True,
     )
 
 st.markdown("</div>", unsafe_allow_html=True)
 
-# ------------------ MAIN CARD ------------------
+# -------------------- MAIN CARD + TILES --------------------
 st.markdown("<div class='nea-card'>", unsafe_allow_html=True)
-st.markdown("<h3 style='margin:0; font-size:26px; font-weight:900;'>Open a tool</h3>", unsafe_allow_html=True)
+st.markdown("<h3 style='margin:0; font-size:28px; font-weight:900;'>Open a tool</h3>", unsafe_allow_html=True)
 
-# Clickable tiles (stable colors + stable layout)
 st.markdown(
     """
     <div class="tiles">
-        <a class="tile b1" href="?go=tcc"><span>⚡ TCC Plot Tool (Q1–Q5)</span></a>
-        <a class="tile b2" href="?go=ocef"><span>🧮 OC/EF Grid Tool</span></a>
-        <a class="tile b3" href="?go=theory"><span>📘 Theory</span></a>
-        <a class="tile b4" href="?go=working"><span>🛠️ Working</span></a>
+        <a class="tile b1" href="?go=tcc">⚡&nbsp;&nbsp;TCC Plot Tool (Q1–Q5)</a>
+        <a class="tile b2" href="?go=ocef">🧮&nbsp;&nbsp;OC/EF Grid Tool</a>
+        <a class="tile b3" href="?go=theory">📘&nbsp;&nbsp;Theory</a>
+        <a class="tile b4" href="?go=working">🛠️&nbsp;&nbsp;Working</a>
     </div>
     """,
-    unsafe_allow_html=True
+    unsafe_allow_html=True,
 )
 
 st.markdown("</div>", unsafe_allow_html=True)
