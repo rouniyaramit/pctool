@@ -8,41 +8,53 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-# -------------------- CSS (UI + design) --------------------
+# -------------------- CSS (HIDE CLOUD UI + DESIGN) --------------------
 st.markdown(
     """
     <style>
-    /* =========================
-       HIDE STREAMLIT CLOUD UI
-       ========================= */
+    /* =========================================================
+       HIDE STREAMLIT CLOUD UI (best-effort)
+       ========================================================= */
+
     /* Top-right toolbar (Share / icons) */
     [data-testid="stToolbar"] {display: none !important;}
-    /* Bottom-right status / "Manage app" / deploy */
+
+    /* Bottom-right Cloud widgets */
     [data-testid="stStatusWidget"] {display: none !important;}
     [data-testid="stAppDeployButton"] {display: none !important;}
-    /* Header container sometimes holds toolbar */
+
+    /* "Manage app" button variations (Cloud changes often) */
+    button[title="Manage app"] {display:none !important;}
+    a[title="Manage app"] {display:none !important;}
+    div[aria-label="Manage app"] {display:none !important;}
+    button[aria-label="Manage app"] {display:none !important;}
+
+    /* Sometimes Cloud buttons live in a fixed container */
+    div[style*="position: fixed"][style*="bottom"] {display:none !important;}
+
+    /* Hide header area that can carry Cloud controls */
     header {visibility: hidden !important;}
     header {height: 0px !important;}
 
-    /* =========================
+    /* =========================================================
        HIDE SIDEBAR / NAV
-       ========================= */
+       ========================================================= */
     section[data-testid="stSidebar"] {display:none !important;}
     div[data-testid="stSidebarNav"] {display:none !important;}
     button[kind="headerNoPadding"] {display:none !important;}
 
-    /* =========================
-       REMOVE ANY INPUT-LIKE BAR
-       ========================= */
+    /* =========================================================
+       REMOVE THE BLANK ROUNDED BAR (BaseWeb input wrapper)
+       ========================================================= */
     [data-baseweb="input"] {display:none !important;}
     [data-baseweb="textarea"] {display:none !important;}
     [data-testid="stTextInput"] {display:none !important;}
     [data-testid="stTextInputRootElement"] {display:none !important;}
     input[type="text"], input[type="search"], textarea {display:none !important;}
 
-    /* =========================
+    /* =========================================================
        BACKGROUND + LAYOUT
-       ========================= */
+       ========================================================= */
     .stApp {
         background: linear-gradient(180deg, #f3f4f6 0%, #eef2f7 60%, #f8fafc 100%) !important;
     }
