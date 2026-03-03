@@ -10,50 +10,36 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-# -------------------- CSS: hide sidebar + Streamlit Cloud header + red-circle artifacts --------------------
+# -------------------- CSS: hide sidebar, menu/footer; keep layout clean --------------------
 st.markdown(
     """
     <style>
-    /* --- Remove sidebar completely --- */
+    /* Sidebar off */
     [data-testid="stSidebar"] {display:none !important;}
     [data-testid="collapsedControl"] {display:none !important;}
 
-    /* --- Remove Streamlit Cloud top header (Share, GitHub, menu) --- */
-    [data-testid="stHeader"] {display:none !important;}
-    header {display:none !important;}
-
-    /* --- Remove Streamlit decoration/status elements (often the red circle) --- */
-    [data-testid="stDecoration"] {display:none !important;}
-    [data-testid="stStatusWidget"] {display:none !important;}
-    div[class*="stStatusWidget"] {display:none !important;}
-    div[class*="stDecoration"] {display:none !important;}
-
-    /* --- Hide any anchor/link artifacts that sometimes render as tiny circles --- */
-    a[href^="#"] {display:none !important;}
+    /* Remove Streamlit toolbars/menu/footer (config.toml removes topbar red circle best) */
     [data-testid="stToolbar"] {display:none !important;}
-
-    /* --- Hide footer & main menu --- */
-    footer {display:none !important;}
     #MainMenu {visibility:hidden;}
+    footer {visibility:hidden;}
 
-    /* --- Layout: ensure logo never gets cut and is centered --- */
+    /* Layout spacing (prevents logo cut) */
     .block-container{
         padding-top: 3.0rem !important;
         padding-bottom: 2.4rem !important;
         max-width: 1150px;
     }
 
-    /* --- Center wrappers --- */
-    .nea-center{display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center;}
-    .nea-title{
-        font-size: 46px;
-        font-weight: 900;
-        margin: 12px 0 8px 0;
-        color: #111827;
-        letter-spacing: 0.2px;
+    /* Center wrapper */
+    .nea-center{
+        display:flex;
+        flex-direction:column;
+        align-items:center;
+        justify-content:center;
+        text-align:center;
     }
 
-    /* --- Logo frame (NO color changes to logo itself) --- */
+    /* Logo frame (does NOT change logo colors) */
     .nea-logo-frame{
         display:inline-flex;
         padding: 10px;
@@ -61,19 +47,29 @@ st.markdown(
         border: 2px solid rgba(220, 38, 38, 0.85);
         background: #ffffff;
         box-shadow: 0 14px 30px rgba(0,0,0,0.10);
-        margin-bottom: 12px;
+        margin-bottom: 14px;
     }
 
-    /* --- Button "tabs" --- */
+    /* Title */
+    .nea-title{
+        font-size: 46px;
+        font-weight: 900;
+        margin: 6px 0 8px 0;
+        color: #111827;
+        letter-spacing: 0.2px;
+    }
+
+    /* Tabs container */
     .tabs-grid{
         display:flex;
         flex-direction:column;
         gap:18px;
         align-items:center;
         margin-top: 16px;
-        margin-bottom: 40px;
+        margin-bottom: 30px;
     }
 
+    /* Tab buttons */
     div.stButton > button{
         width: 610px !important;
         height: 62px !important;
@@ -107,90 +103,73 @@ st.markdown(
 
 # -------------------- Navigation --------------------
 def go(page_path: str):
-    # Streamlit multipage navigation
     try:
         st.switch_page(page_path)
     except Exception:
-        # fallback: show info rather than breaking
-        st.info("Navigation is not available in this Streamlit version. Please upgrade Streamlit or use multipage menu.")
+        st.info("Navigation not available in this Streamlit version. Upgrade Streamlit or use multipage menu.")
 
-# -------------------- Header (logo centered above title, no color modification) --------------------
+# -------------------- Header: logo centered ABOVE title --------------------
 st.markdown('<div class="nea-center">', unsafe_allow_html=True)
 
 logo_path = os.path.join(BASE_DIR, "logo.jpg")
 if os.path.exists(logo_path):
-    # Do NOT modify colors
-    img = Image.open(logo_path)
+    img = Image.open(logo_path)  # NO color modifications
     st.markdown('<div class="nea-logo-frame">', unsafe_allow_html=True)
-    # Using use_container_width=False + explicit width keeps it centered reliably
     st.image(img, width=125)
     st.markdown("</div>", unsafe_allow_html=True)
 
-# Title (subtitle removed as requested)
+# Subtitle removed (as requested)
 st.markdown('<div class="nea-title">NEA Protection &amp; Coordination Tools</div>', unsafe_allow_html=True)
-
 st.markdown("</div>", unsafe_allow_html=True)
 
 st.divider()
 
-# -------------------- 4 attractive blue shade "tabs" with icons --------------------
+# -------------------- 4 blue-shade tabs with icons --------------------
 pad_l, center, pad_r = st.columns([1, 2, 1])
 with center:
     st.markdown('<div class="tabs-grid">', unsafe_allow_html=True)
 
-    # Tab 1
-    st.markdown(
-        """
-        <style>
-        div.stButton:nth-of-type(1) > button{
-            background: linear-gradient(135deg, #0B5ED7 0%, #2563EB 55%, #1D4ED8 100%) !important;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
+    # 1
+    st.markdown("""
+    <style>
+    div.stButton:nth-of-type(1) > button{
+        background: linear-gradient(135deg, #0B5ED7 0%, #2563EB 55%, #1D4ED8 100%) !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
     if st.button("📈  Protection Coordination Tool (TCC Plot)"):
         go("pages/1_TCC_Tool.py")
 
-    # Tab 2
-    st.markdown(
-        """
-        <style>
-        div.stButton:nth-of-type(2) > button{
-            background: linear-gradient(135deg, #0A58CA 0%, #1D4ED8 55%, #1E40AF 100%) !important;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
+    # 2
+    st.markdown("""
+    <style>
+    div.stButton:nth-of-type(2) > button{
+        background: linear-gradient(135deg, #0A58CA 0%, #1D4ED8 55%, #1E40AF 100%) !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
     if st.button("⚡  OC / EF Grid Coordination Tool"):
         go("pages/2_OC_EF_Grid.py")
 
-    # Tab 3
-    st.markdown(
-        """
-        <style>
-        div.stButton:nth-of-type(3) > button{
-            background: linear-gradient(135deg, #1D4ED8 0%, #1E40AF 60%, #1E3A8A 100%) !important;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
+    # 3
+    st.markdown("""
+    <style>
+    div.stButton:nth-of-type(3) > button{
+        background: linear-gradient(135deg, #1D4ED8 0%, #1E40AF 60%, #1E3A8A 100%) !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
     if st.button("📘  Protection Theory Guide"):
         go("pages/3_Theory.py")
 
-    # Tab 4
-    st.markdown(
-        """
-        <style>
-        div.stButton:nth-of-type(4) > button{
-            background: linear-gradient(135deg, #1E40AF 0%, #1E3A8A 60%, #172554 100%) !important;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
+    # 4
+    st.markdown("""
+    <style>
+    div.stButton:nth-of-type(4) > button{
+        background: linear-gradient(135deg, #1E40AF 0%, #1E3A8A 60%, #172554 100%) !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
     if st.button("🛠️  Working Methodology / Manual"):
         go("pages/4_Working.py")
 
