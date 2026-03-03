@@ -10,175 +10,150 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-# -------------------- CSS (grey background + clean UI) --------------------
-st.markdown(
-    """
-    <style>
-    /* Grey background (force) */
-    html, body, [data-testid="stApp"] {
-        background: #eef2f7 !important;
-    }
+# -------------------- GLOBAL CSS --------------------
+st.markdown("""
+<style>
 
-    /* Hide sidebar completely */
-    [data-testid="stSidebar"] {display:none !important;}
-    [data-testid="collapsedControl"] {display:none !important;}
+/* Force light grey background */
+html, body, [data-testid="stApp"] {
+    background: #eef2f7 !important;
+}
 
-    /* Hide toolbar/menu/footer inside app (top bar is removed reliably via config.toml) */
-    [data-testid="stToolbar"] {display:none !important;}
-    #MainMenu {visibility:hidden;}
-    footer {visibility:hidden;}
+/* Remove sidebar */
+[data-testid="stSidebar"] {display:none !important;}
+[data-testid="collapsedControl"] {display:none !important;}
 
-    /* Layout spacing */
-    .block-container{
-        padding-top: 2.8rem !important;
-        padding-bottom: 2.2rem !important;
-        max-width: 1150px;
-    }
+/* Remove menu/footer */
+#MainMenu {visibility:hidden;}
+footer {visibility:hidden;}
 
-    /* Perfect center wrapper */
-    .nea-wrap{
-        display:flex;
-        flex-direction:column;
-        align-items:center;
-        justify-content:center;
-        text-align:center;
-    }
+/* Main container spacing */
+.block-container{
+    padding-top: 3.2rem !important;
+    padding-bottom: 2.5rem !important;
+    max-width: 900px;      /* THIS controls straight alignment */
+    margin: auto;
+}
 
-    /* Logo frame (does NOT change logo colors) */
-    .nea-logo-frame{
-        display:inline-flex;
-        padding: 10px;
-        border-radius: 16px;
-        border: 2px solid rgba(220, 38, 38, 0.85);
-        background: #ffffff;
-        box-shadow: 0 14px 30px rgba(0,0,0,0.10);
-        margin-bottom: 14px;
-    }
+/* Master wrapper */
+.center-wrapper{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    text-align:center;
+}
 
-    /* Title */
-    .nea-title{
-        font-size: 46px;
-        font-weight: 900;
-        margin: 6px 0 6px 0;
-        color: #111827;
-        letter-spacing: 0.2px;
-    }
+/* Logo frame */
+.logo-frame{
+    display:inline-flex;
+    padding:10px;
+    border-radius:16px;
+    border:2px solid rgba(220,38,38,0.85);
+    background:white;
+    box-shadow:0 14px 30px rgba(0,0,0,0.10);
+    margin-bottom:18px;
+}
 
-    /* Divider spacing */
-    hr {margin: 18px 0 22px 0 !important;}
+/* Title */
+.main-title{
+    font-size:46px;
+    font-weight:900;
+    color:#111827;
+    margin:8px 0 25px 0;
+    letter-spacing:0.2px;
+}
 
-    /* Tabs container */
-    .tabs-grid{
-        display:flex;
-        flex-direction:column;
-        gap:18px;
-        align-items:center;
-        margin-top: 14px;
-        margin-bottom: 24px;
-    }
+/* Buttons */
+div.stButton > button{
+    width:100% !important;   /* EXACT SAME WIDTH as container */
+    height:64px !important;
+    border-radius:18px !important;
+    font-size:16px !important;
+    font-weight:900 !important;
+    border:none !important;
+    box-shadow:0 14px 28px rgba(0,0,0,0.12) !important;
+    transition: all 0.15s ease;
+    text-align:center !important;
+    color:white !important;
+}
+div.stButton > button:hover{
+    transform: translateY(-2px);
+    filter: brightness(1.07);
+}
 
-    /* Tab button base style */
-    div.stButton > button{
-        width: 620px !important;
-        height: 64px !important;
-        border-radius: 18px !important;
-        font-size: 16px !important;
-        font-weight: 900 !important;
-        border: 1px solid rgba(255,255,255,0.22) !important;
-        box-shadow: 0 14px 28px rgba(0,0,0,0.10) !important;
-        transition: transform 0.08s ease, filter 0.14s ease, box-shadow 0.14s ease;
-        text-align: left !important;
-        padding-left: 18px !important;
-        letter-spacing: 0.1px;
-        color: #ffffff !important;
-    }
-    div.stButton > button:hover{
-        transform: translateY(-2px);
-        filter: brightness(1.06);
-        box-shadow: 0 16px 34px rgba(0,0,0,0.14) !important;
-    }
-    div.stButton > button:active{transform: translateY(0px);}
+/* Responsive */
+@media (max-width: 720px){
+    .main-title{font-size:32px;}
+}
 
-    /* Responsive */
-    @media (max-width: 720px){
-        div.stButton > button {width: 94vw !important;}
-        .nea-title{font-size: 34px;}
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+</style>
+""", unsafe_allow_html=True)
 
-# -------------------- Navigation --------------------
-def go(page_path: str):
-    try:
-        st.switch_page(page_path)
-    except Exception:
-        st.info("Navigation not available in this Streamlit version. Upgrade Streamlit or use multipage menu.")
-
-# -------------------- Header: logo centered above title --------------------
-st.markdown('<div class="nea-wrap">', unsafe_allow_html=True)
+# -------------------- HEADER --------------------
+st.markdown('<div class="center-wrapper">', unsafe_allow_html=True)
 
 logo_path = os.path.join(BASE_DIR, "logo.jpg")
 if os.path.exists(logo_path):
-    img = Image.open(logo_path)  # NO color modifications
-    st.markdown('<div class="nea-logo-frame">', unsafe_allow_html=True)
-    st.image(img, width=125)
-    st.markdown("</div>", unsafe_allow_html=True)
+    img = Image.open(logo_path)   # NO color modification
+    st.markdown('<div class="logo-frame">', unsafe_allow_html=True)
+    st.image(img, width=130)
+    st.markdown('</div>', unsafe_allow_html=True)
 
-# Subtitle removed (as you asked)
-st.markdown('<div class="nea-title">NEA Protection &amp; Coordination Tools</div>', unsafe_allow_html=True)
-st.markdown("</div>", unsafe_allow_html=True)
+st.markdown('<div class="main-title">NEA Protection & Coordination Tools</div>', unsafe_allow_html=True)
+st.markdown('</div>', unsafe_allow_html=True)
 
 st.divider()
 
-# -------------------- 4 attractive blue shade tabs with icons --------------------
-pad_l, center, pad_r = st.columns([1, 2, 1])
-with center:
-    st.markdown('<div class="tabs-grid">', unsafe_allow_html=True)
+# -------------------- NAVIGATION FUNCTION --------------------
+def go(page):
+    try:
+        st.switch_page(page)
+    except:
+        pass
 
-    # Tab 1
-    st.markdown("""
-    <style>
-    div.stButton:nth-of-type(1) > button{
-        background: linear-gradient(135deg, #0B5ED7 0%, #2563EB 55%, #1D4ED8 100%) !important;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-    if st.button("📈  Protection Coordination Tool (TCC Plot)"):
-        go("pages/1_TCC_Tool.py")
+# -------------------- BUTTONS (perfect straight alignment) --------------------
 
-    # Tab 2
-    st.markdown("""
-    <style>
-    div.stButton:nth-of-type(2) > button{
-        background: linear-gradient(135deg, #0A58CA 0%, #1D4ED8 55%, #1E40AF 100%) !important;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-    if st.button("⚡  OC / EF Grid Coordination Tool"):
-        go("pages/2_OC_EF_Grid.py")
+# Blue Shade 1
+st.markdown("""
+<style>
+div.stButton:nth-of-type(1) > button{
+background: linear-gradient(135deg,#0B5ED7,#2563EB,#1D4ED8) !important;
+}
+</style>
+""", unsafe_allow_html=True)
+if st.button("📈  Protection Coordination Tool (TCC Plot)"):
+    go("pages/1_TCC_Tool.py")
 
-    # Tab 3
-    st.markdown("""
-    <style>
-    div.stButton:nth-of-type(3) > button{
-        background: linear-gradient(135deg, #1D4ED8 0%, #1E40AF 60%, #1E3A8A 100%) !important;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-    if st.button("📘  Protection Theory Guide"):
-        go("pages/3_Theory.py")
+# Blue Shade 2
+st.markdown("""
+<style>
+div.stButton:nth-of-type(2) > button{
+background: linear-gradient(135deg,#0A58CA,#1D4ED8,#1E40AF) !important;
+}
+</style>
+""", unsafe_allow_html=True)
+if st.button("⚡  OC / EF Grid Coordination Tool"):
+    go("pages/2_OC_EF_Grid.py")
 
-    # Tab 4
-    st.markdown("""
-    <style>
-    div.stButton:nth-of-type(4) > button{
-        background: linear-gradient(135deg, #1E40AF 0%, #1E3A8A 60%, #172554 100%) !important;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-    if st.button("🛠️  Working Methodology / Manual"):
-        go("pages/4_Working.py")
+# Blue Shade 3
+st.markdown("""
+<style>
+div.stButton:nth-of-type(3) > button{
+background: linear-gradient(135deg,#1D4ED8,#1E40AF,#1E3A8A) !important;
+}
+</style>
+""", unsafe_allow_html=True)
+if st.button("📘  Protection Theory Guide"):
+    go("pages/3_Theory.py")
 
-    st.markdown("</div>", unsafe_allow_html=True)
+# Blue Shade 4
+st.markdown("""
+<style>
+div.stButton:nth-of-type(4) > button{
+background: linear-gradient(135deg,#1E40AF,#1E3A8A,#172554) !important;
+}
+</style>
+""", unsafe_allow_html=True)
+if st.button("🛠️  Working Methodology / Manual"):
+    go("pages/4_Working.py")
